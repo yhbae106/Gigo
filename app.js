@@ -78,13 +78,19 @@ function setMasterUI(on){
   if($('masterPassword'))$('masterPassword').disabled=masterOn;
   if($('masterSaveBtn'))$('masterSaveBtn').disabled=!(masterOn&&analysis);
 }
+function updateSharedDownloadButton(){
+  const btn=$('sharedDownloadBtn');
+  if(!btn)return;
+  const months=Object.keys(gigoShared.months||{}).sort();
+  btn.disabled=!months.length;
+}
 async function pullSharedData(render=true){
   if(!syncEndpoint()){masterStatus('공용 저장소 미연결 · sync-config.js에 Apps Script URL 설정 필요');return false}
   try{
     masterStatus('공용 저장 데이터 확인 중…');
     const json=await syncRequest({type:'gigoLoad'});
     gigoShared=normalizeShared(json.data);
-    const keys=Object.keys(gigoShared.months).sort();
+    const keys=Object.keys(gigoShared.months).sort();updateSharedDownloadButton();
     if(!keys.length){masterStatus('공용 저장 데이터가 아직 없습니다.');return true}
     const latest=keys.at(-1),snap=gigoShared.months[latest];
     masterStatus('공용 데이터 적용 · 최근 저장 '+latest+(json.updatedAt?' · '+new Date(json.updatedAt).toLocaleString('ko-KR'):''),'good');
@@ -119,7 +125,7 @@ async function saveMasterCurrent(){
     $('masterSaveBtn').disabled=true;masterStatus(month+' 공용 저장 중…');
     const snap={rows:analysis.calc.rows.map(x=>({id:x.id,group:x.group,payType:x.payType,code:x.code,name:x.name,ch:x.ch,amount:x.amount,final:x.final,source:x.source,found:x.found,isExc:x.isExc})),matched:analysis.calc.matched,unmatched:analysis.calc.unmatched};
     const json=await syncRequest({type:'gigoSave',password:pw,month,snapshot:snap});
-    gigoShared=normalizeShared(json.data);
+    gigoShared=normalizeShared(json.data);updateSharedDownloadButton();
     masterStatus(month+' 공용 저장 완료 · 다른 브라우저에서 자동 조회됩니다.','good');
   }catch(e){masterStatus('공용 저장 실패 · '+e.message,'bad')}
   finally{$('masterSaveBtn').disabled=!(masterOn&&analysis)}
@@ -501,12 +507,34 @@ $('saveJpgBtn')?.addEventListener('click',()=>{
   a.download='기고 수금내역_'+(yy||'')+'-'+(mm||'')+'_미리보기.jpg';
   a.click();
 });
+async function downloadSharedWorkbook(){
+  const months=Object.keys(gigoShared.months||{}).sort();
+  if(!months.length){masterStatus('공용 저장된 월 데이터가 없습니다.','bad');return}
+  let selected=$('targetMonth').value||'';
+  if(!gigoShared.months[selected]) selected=months.at(-1);
+  const wb=buildBaseWorkbook(),ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
+  for(const m of months){
+    if(m>selected)break;
+    const snap=gigoShared.months[m];
+    if(snap&&Array.isArray(snap.rows))applyMonth(ws,{rows:snap.rows},m);
+  }
+  const [yy,mm]=selected.split('-');
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='기고 수금 내역서_'+(yy||'')+'년 '+(mm||'')+'월_공용.xlsx';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  masterStatus((yy||'')+'년 '+(mm||'')+'월 공용 수금내역서 다운로드 완료','good');
+}
 $('masterLoginBtn')?.addEventListener('click',masterLogin);
 $('masterRefreshBtn')?.addEventListener('click',()=>pullSharedData(true));
 $('masterSaveBtn')?.addEventListener('click',saveMasterCurrent);
+$('sharedDownloadBtn')?.addEventListener('click',downloadSharedWorkbook);
 $('masterPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')masterLogin()});
 (async()=>{
-  setMasterUI(false);
+  setMasterUI(false);updateSharedDownloadButton();
   const savedPw=sessionStorage.getItem('gigo-master-password');
   if(savedPw&&syncEndpoint()){
     try{await syncRequest({type:'gigoMasterLogin',password:savedPw});setMasterUI(true);masterStatus('마스터 세션 복원 완료','good')}catch(_){sessionStorage.removeItem('gigo-master-password')}
