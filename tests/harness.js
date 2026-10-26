@@ -7,7 +7,7 @@ const cfg=fs.readFileSync('sync-config.js','utf8');
   'filesInput','targetMonth','analyzeBtn','downloadBtn','previewCanvas','previewImage',
   'previewShell','previewEmpty','previewSub','matchInfo','saveJpgBtn',
   'masterPassword','masterLoginBtn','masterRefreshBtn','masterSaveBtn','masterStatus'
-].forEach(id=>ok(html.includes('id="'+id+'"'),'DOM id '+id));
+].concat(['sharedDownloadBtn']).forEach(id=>ok(html.includes('id="'+id+'"'),'DOM id '+id));
 ok(/app\.js\?v=/.test(html),'app.js cache-busting version');
 ok(js.includes('async function renderExcelPreview'),'preview renderer exists');
 ok(js.includes('firstCol=1,lastCol=7,renderRows=previewRows(ws)'),'preview fixed to row 6 through column G with filtered rows');
@@ -18,6 +18,7 @@ ok(js.includes('previewRowHasVisibleValue')&&js.includes('previewRows(ws)'),'hid
 ok(js.includes("saveJpgBtn"),'JPG button wiring');
 ok(js.includes('previewMerges')&&js.includes('previewMergeAt'),'merged-cell rendering');
 ok(js.includes('gigoLoad')&&js.includes('gigoSave')&&js.includes('gigoMasterLogin'),'cross-browser master sync');
+ok(js.includes('downloadSharedWorkbook')&&js.includes('sharedDownloadBtn'),'public shared workbook download');
 ok(/endpoint:\s*'https:\/\/script\.google\.com\/macros\/s\//.test(cfg),'Apps Script endpoint configured');
 if(process.exitCode)process.exit(process.exitCode);
 console.log('Gigo harness passed.');
