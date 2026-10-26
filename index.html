@@ -33,6 +33,20 @@
     <div class="pill">브라우저 내부 처리 · 원본 외부 전송 없음</div>
   </header>
 
+  <section class="panel" id="masterPanel">
+    <div class="section-head">
+      <div><h3>공용 데이터 · 마스터모드</h3><p>마스터 저장값은 브라우저가 달라도 동일하게 불러옵니다.</p></div>
+      <span class="pill" id="masterBadge">읽기 전용</span>
+    </div>
+    <div class="actionrow" style="grid-template-columns:minmax(180px,240px) 150px 160px 190px">
+      <div class="field"><label>마스터 비밀번호</label><input type="password" id="masterPassword" autocomplete="current-password" placeholder="마스터 비밀번호"></div>
+      <button class="btn" id="masterLoginBtn">마스터 로그인</button>
+      <button class="btn" id="masterRefreshBtn">공용 새로고침</button>
+      <button class="btn primary" id="masterSaveBtn" disabled>현재 월 공용 저장</button>
+    </div>
+    <div id="masterStatus" class="status">공용 저장소 연결 상태를 확인하고 있습니다.</div>
+  </section>
+
   <section class="panel">
     <div class="upload-zone">
       <label class="drop" id="filesDrop" for="filesInput">
@@ -86,6 +100,7 @@
   <div class="privacy">기준 양식: 2026년 10월 샘플 · 월별 누적 생성</div>
 </div>
 <canvas id="previewCanvas" style="display:none"></canvas>
-<script src="app.js?v=20261026-10"></script>
+<script src="sync-config.js?v=20261026-1"></script>
+<script src="app.js?v=20261026-11"></script>
 </body>
 </html>
