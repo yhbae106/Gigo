@@ -1,6 +1,7 @@
 
 const $=id=>document.getElementById(id);
 let dcmFile=null,sapFile=null,analysis=null;
+let gigoShared={version:1,months:{}}, masterOn=false;
 const T=[
 ['약국현금','현금','10039905','대구가톨릭대학교의료원','DW35'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW35'],['약국현금','현금','10039905','대구가톨릭대학교의료원','DW30'],['약국현금','현금','10040464','(재)천주교부산교구메리놀병원','DW30'],['약국현금','현금','10040911','창원파티마병원','DW30'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW30'],['약국현금','현금','10093445','주식회사기고(GIGO)','DW18'],
 ['병원현금','현금','10039568','포항성모병원','DW23'],['병원현금','현금','10039568','포항성모병원','DW26'],['병원현금','현금','10040464','(재)천주교부산교구메리놀병원','DW23'],['병원현금','현금','10039205','대구파티마병원','DW34'],['병원현금','현금','10039205','대구파티마병원','DW24'],['병원현금','현금','10039425','대구가톨릭대학교칠곡가톨릭병원','DW24'],['병원현금','현금','10039905','대구가톨릭대학교의료원','DW24'],['병원현금','현금','10040464','(재)천주교부산교구메리놀병원','DW24'],['병원현금','현금','10040911','창원파티마병원','DW24'],['병원현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW24'],['병원현금','현금','10093445','주식회사기고(GIGO)','DW24'],['병원현금','현금','10040464','(재)천주교부산교구메리놀병원','DW26'],['병원현금','현금','10040911','창원파티마병원','DW26'],['병원현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW26'],
@@ -49,6 +50,80 @@ filesInput.addEventListener('change',e=>acceptFiles(e.target.files));
 ['dragenter','dragover'].forEach(ev=>filesDrop.addEventListener(ev,e=>{e.preventDefault();filesDrop.classList.add('drag')}));
 ['dragleave','drop'].forEach(ev=>filesDrop.addEventListener(ev,e=>{e.preventDefault();filesDrop.classList.remove('drag')}));
 filesDrop.addEventListener('drop',e=>acceptFiles(e.dataTransfer.files));
+
+function syncEndpoint(){return String(window.GIGO_SYNC?.endpoint||'').trim()}
+function masterStatus(msg,kind=''){const el=$('masterStatus');if(!el)return;el.textContent=msg;el.className='status'+(kind?' '+kind:'')}
+function normalizeShared(v){
+  const out={version:1,months:{}};
+  if(v&&typeof v==='object'&&v.months&&typeof v.months==='object'){
+    for(const [m,x] of Object.entries(v.months)){
+      if(!/^20\d{2}-\d{2}$/.test(m)||!x||!Array.isArray(x.rows))continue;
+      out.months[m]={rows:x.rows.map(r=>({...r,amount:num(r.amount),final:num(r.final)})),matched:num(x.matched),unmatched:num(x.unmatched),savedAt:x.savedAt||''};
+    }
+  }
+  return out;
+}
+async function syncRequest(payload){
+  if(!syncEndpoint())throw new Error('공용 저장소 주소가 아직 설정되지 않았습니다.');
+  const res=await fetch(syncEndpoint(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+  if(!res.ok)throw new Error('공용 저장소 HTTP '+res.status);
+  const json=await res.json();
+  if(json?.ok!==true)throw new Error(json?.error||'공용 저장소 요청 실패');
+  return json;
+}
+function setMasterUI(on){
+  masterOn=!!on;
+  if($('masterBadge'))$('masterBadge').textContent=masterOn?'MASTER ON':'읽기 전용';
+  if($('masterLoginBtn'))$('masterLoginBtn').textContent=masterOn?'마스터 종료':'마스터 로그인';
+  if($('masterPassword'))$('masterPassword').disabled=masterOn;
+  if($('masterSaveBtn'))$('masterSaveBtn').disabled=!(masterOn&&analysis);
+}
+async function pullSharedData(render=true){
+  if(!syncEndpoint()){masterStatus('공용 저장소 미연결 · sync-config.js에 Apps Script URL 설정 필요');return false}
+  try{
+    masterStatus('공용 저장 데이터 확인 중…');
+    const json=await syncRequest({type:'gigoLoad'});
+    gigoShared=normalizeShared(json.data);
+    const keys=Object.keys(gigoShared.months).sort();
+    if(!keys.length){masterStatus('공용 저장 데이터가 아직 없습니다.');return true}
+    const latest=keys.at(-1),snap=gigoShared.months[latest];
+    masterStatus('공용 데이터 적용 · 최근 저장 '+latest+(json.updatedAt?' · '+new Date(json.updatedAt).toLocaleString('ko-KR'):''),'good');
+    if(render&&!analysis){
+      $('targetMonth').value=latest;
+      const c={rows:snap.rows,matched:snap.matched||snap.rows.length,unmatched:snap.unmatched||0};
+      show(c);
+      await renderExcelPreview(c,latest);
+      $('matchInfo').textContent='공용 저장 · '+latest;
+    }
+    return true;
+  }catch(e){masterStatus('공용 데이터 조회 실패 · '+e.message,'bad');return false}
+}
+async function masterLogin(){
+  if(masterOn){sessionStorage.removeItem('gigo-master-password');setMasterUI(false);masterStatus('마스터 모드를 종료했습니다.');return}
+  const pw=$('masterPassword')?.value||'';
+  if(!pw){masterStatus('마스터 비밀번호를 입력해 주세요.','bad');return}
+  try{
+    masterStatus('마스터 인증 중…');
+    await syncRequest({type:'gigoMasterLogin',password:pw});
+    sessionStorage.setItem('gigo-master-password',pw);
+    setMasterUI(true);
+    $('masterPassword').value='';
+    masterStatus('마스터 인증 완료 · 현재 월 결과를 공용 저장할 수 있습니다.','good');
+  }catch(e){sessionStorage.removeItem('gigo-master-password');setMasterUI(false);masterStatus('마스터 인증 실패 · '+e.message,'bad')}
+}
+async function saveMasterCurrent(){
+  if(!masterOn||!analysis)return;
+  const pw=sessionStorage.getItem('gigo-master-password')||'';
+  const month=$('targetMonth').value||analysis.targetMonth||'';
+  try{
+    $('masterSaveBtn').disabled=true;masterStatus(month+' 공용 저장 중…');
+    const snap={rows:analysis.calc.rows.map(x=>({id:x.id,group:x.group,payType:x.payType,code:x.code,name:x.name,ch:x.ch,amount:x.amount,final:x.final,source:x.source,found:x.found,isExc:x.isExc})),matched:analysis.calc.matched,unmatched:analysis.calc.unmatched};
+    const json=await syncRequest({type:'gigoSave',password:pw,month,snapshot:snap});
+    gigoShared=normalizeShared(json.data);
+    masterStatus(month+' 공용 저장 완료 · 다른 브라우저에서 자동 조회됩니다.','good');
+  }catch(e){masterStatus('공용 저장 실패 · '+e.message,'bad')}
+  finally{$('masterSaveBtn').disabled=!(masterOn&&analysis)}
+}
 function parseYmText(text){
   const t=String(text||'');
   let m=t.match(/(20\d{2})[^0-9]{0,3}(1[0-2]|0?[1-9])\s*월?/);
@@ -107,7 +182,7 @@ async function analyzeFiles(){
     else if(sYm)monthMsg='대상월 '+target.year+'년 '+target.month+'월 · SAP 전월 기준';
     const d=dmap(ds),sm=smap(ss),c=calc(d,sm);
     analysis={calc:c,dws:ds,sws:ss,targetMonth:$('targetMonth').value};
-    show(c);$('downloadBtn').disabled=false;
+    show(c);$('downloadBtn').disabled=false;if($('masterSaveBtn'))$('masterSaveBtn').disabled=!masterOn;
     await renderExcelPreview(c,$('targetMonth').value);
     status((c.unmatched?'계산 완료 · '+c.matched+'건 매칭 / '+c.unmatched+'건 미매칭':'계산 완료 · '+c.matched+'건 모두 매칭')+' · '+monthMsg,c.unmatched?'':'good');
   }catch(e){console.error(e);status('오류: '+e.message,'bad')}
@@ -242,9 +317,18 @@ async function loadCumulative(){
   db.close();return data;
 }
 async function loadBaseWorkbook(selectedMonth){
+  const sharedMonths=Object.keys(gigoShared.months||{}).filter(m=>m<selectedMonth).sort();
+  if(sharedMonths.length){
+    const wb=buildBaseWorkbook(),ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
+    for(const m of sharedMonths){
+      const snap=gigoShared.months[m];
+      applyMonth(ws,{rows:snap.rows},m);
+    }
+    return{wb,source:'공용 누적 데이터('+sharedMonths.at(-1)+')'};
+  }
   const saved=await loadCumulative().catch(()=>null);
   if(saved&&saved.buffer&&saved.month&&saved.month<selectedMonth){
-    try{const wb=new ExcelJS.Workbook();await wb.xlsx.load(saved.buffer);return{wb,source:'이전 누적 파일('+saved.month+')'}}catch(e){console.warn('saved workbook ignored',e)}
+    try{const wb=new ExcelJS.Workbook();await wb.xlsx.load(saved.buffer);return{wb,source:'이 브라우저 누적 파일('+saved.month+')'}}catch(e){console.warn('saved workbook ignored',e)}
   }
   return{wb:buildBaseWorkbook(),source:'10월 기본 샘플'};
 }
@@ -306,6 +390,18 @@ async function renderExcelPreview(calcResult,month){
     $('previewSub').textContent=mc.year+'년 '+mc.month+'월 생성 파일 첫 시트 · '+ws.getColumn(mc.target).letter+'/'+ws.getColumn(mc.final).letter+'열 반영';
   }catch(e){console.error('preview error',e);$('previewSub').textContent='미리보기 생성 중 오류가 발생했습니다.'}
 }
+$('masterLoginBtn')?.addEventListener('click',masterLogin);
+$('masterRefreshBtn')?.addEventListener('click',()=>pullSharedData(true));
+$('masterSaveBtn')?.addEventListener('click',saveMasterCurrent);
+$('masterPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')masterLogin()});
+(async()=>{
+  setMasterUI(false);
+  const savedPw=sessionStorage.getItem('gigo-master-password');
+  if(savedPw&&syncEndpoint()){
+    try{await syncRequest({type:'gigoMasterLogin',password:savedPw});setMasterUI(true);masterStatus('마스터 세션 복원 완료','good')}catch(_){sessionStorage.removeItem('gigo-master-password')}
+  }
+  await pullSharedData(true);
+})();
 $('downloadBtn').addEventListener('click',async()=>{
   try{
     if(!analysis)return;
