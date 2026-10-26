@@ -372,17 +372,20 @@ function previewCellText(cell){
   if(typeof v==='number')return Math.round(v).toLocaleString('ko-KR');
   return String(v);
 }
-function findPreviewLastRow(ws){
-  let last=6;
-  for(let r=6;r<=200;r++){
-    let has=false;
-    for(let c=1;c<=7;c++){
-      const t=previewCellText(ws.getCell(r,c));
-      if(String(t||'').trim()!==''){has=true;break}
-    }
-    if(has)last=r;
+function previewRowHasVisibleValue(ws,r){
+  for(let c=1;c<=7;c++){
+    const t=previewCellText(ws.getCell(r,c));
+    if(String(t||'').trim()!=='')return true;
   }
-  return last;
+  return false;
+}
+function previewRows(ws){
+  const rows=[];
+  for(let r=6;r<=200;r++){
+    if(ws.getRow(r).hidden)continue;
+    if(previewRowHasVisibleValue(ws,r))rows.push(r);
+  }
+  return rows;
 }
 function previewDisplayText(cell,r,c){
   let text=previewCellText(cell);
@@ -423,17 +426,19 @@ async function renderExcelPreview(calcResult,month){
     const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
     applyMonth(ws,calcResult,month);
 
-    const firstCol=1,lastCol=7,firstRow=6,lastRow=findPreviewLastRow(ws);
-    const widths=[],xPos=[0],rowHeights=[],yPos=[0];
+    const firstCol=1,lastCol=7,renderRows=previewRows(ws);
+    if(!renderRows.length)throw new Error('미리보기에 표시할 행이 없습니다.');
+    const widths=[],xPos=[0],rowHeights=[],yPos=[0],rowIndex=new Map();
 
     for(let c=firstCol;c<=lastCol;c++){
       const px=Math.max(54,Math.min(320,(ws.getColumn(c).width||12)*7.2));
       widths.push(px);xPos.push(xPos.at(-1)+px);
     }
-    for(let r=firstRow;r<=lastRow;r++){
+    renderRows.forEach((r,i)=>{
+      rowIndex.set(r,i);
       const px=Math.max(18,Math.min(42,ws.getRow(r).height||22));
       rowHeights.push(px);yPos.push(yPos.at(-1)+px);
-    }
+    });
 
     const totalW=xPos.at(-1),totalH=yPos.at(-1),scale=1.8;
     const canvas=$('previewCanvas'),ctx=canvas.getContext('2d');
@@ -442,19 +447,20 @@ async function renderExcelPreview(calcResult,month){
     ctx.fillStyle='#fff';ctx.fillRect(0,0,totalW,totalH);
 
     const merges=previewMerges(ws),skip=new Set();
-    for(let r=firstRow;r<=lastRow;r++){
+    for(const r of renderRows){
+      const ri=rowIndex.get(r);
       for(let c=firstCol;c<=lastCol;c++){
         const k=r+':'+c;if(skip.has(k))continue;
         const m=previewMergeAt(merges,r,c);
         if(m&&(m.top!==r||m.left!==c))continue;
 
-        let x=xPos[c-firstCol],y=yPos[r-firstRow],w=widths[c-firstCol],h=rowHeights[r-firstRow];
+        let x=xPos[c-firstCol],y=yPos[ri],w=widths[c-firstCol],h=rowHeights[ri];
         if(m){
-          const l=Math.max(m.left,firstCol),rr=Math.min(m.right,lastCol),t=Math.max(m.top,firstRow),bb=Math.min(m.bottom,lastRow);
-          if(l<=rr&&t<=bb){
-            x=xPos[l-firstCol];y=yPos[t-firstRow];
-            w=xPos[rr-firstCol+1]-x;h=yPos[bb-firstRow+1]-y;
-            for(let mr=t;mr<=bb;mr++)for(let mc=l;mc<=rr;mc++)if(!(mr===r&&mc===c))skip.add(mr+':'+mc);
+          const l=Math.max(m.left,firstCol),rr=Math.min(m.right,lastCol);
+          if(l<=rr){
+            x=xPos[l-firstCol];
+            w=xPos[rr-firstCol+1]-x;
+            for(let mc=l;mc<=rr;mc++)if(mc!==c)skip.add(r+':'+mc);
           }
         }
 
@@ -478,7 +484,7 @@ async function renderExcelPreview(calcResult,month){
     previewJpgUrl=canvas.toDataURL('image/jpeg',0.96);
     $('previewImage').src=png;
     $('previewShell').style.display='flex';$('previewEmpty').style.display='none';
-    $('previewSub').textContent=month+' 기준 · 6행부터 G열까지 전체 미리보기';
+    $('previewSub').textContent=month+' 기준 · 6행부터 G열까지 · 공란 행 자동 제거';
     if($('saveJpgBtn'))$('saveJpgBtn').disabled=false;
   }catch(e){
     console.error('preview error',e);
