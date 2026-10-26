@@ -15,15 +15,77 @@ const val=(ws,r,c)=>{const x=ws.getCell(r,c).value;if(x&&typeof x==='object'&&'r
 function status(m,k){$('status').textContent=m;$('status').className='status'+(k?' '+k:'')}
 function wire(i,d,n,set){const I=$(i),D=$(d),N=$(n),use=f=>{if(!f)return;if(!/\.xlsx$/i.test(f.name)){N.textContent='xlsx 파일만 지원합니다.';N.className='fileline bad';return}set(f);N.textContent='✓ '+f.name;N.className='fileline';ready()};I.addEventListener('change',e=>use(e.target.files[0]));['dragenter','dragover'].forEach(x=>D.addEventListener(x,e=>{e.preventDefault();D.classList.add('drag')}));['dragleave','drop'].forEach(x=>D.addEventListener(x,e=>{e.preventDefault();D.classList.remove('drag')}));D.addEventListener('drop',e=>use(e.dataTransfer.files[0]))}
 wire('dcmFile','dcmDrop','dcmName',f=>dcmFile=f);wire('sapFile','sapDrop','sapName',f=>sapFile=f);
-function ready(){$('analyzeBtn').disabled=!(dcmFile&&sapFile);$('downloadBtn').disabled=true;analysis=null}
+function parseYmText(text){
+  const t=String(text||'');
+  let m=t.match(/(20\d{2})[^0-9]{0,3}(1[0-2]|0?[1-9])\s*월?/);
+  if(m)return {year:Number(m[1]),month:Number(m[2])};
+  m=t.match(/(?:^|[^0-9])(\d{2})[._\-\s](1[0-2]|0?[1-9])(?:[^0-9]|$)/);
+  if(m)return {year:2000+Number(m[1]),month:Number(m[2])};
+  m=t.match(/(?:^|[^0-9])(1[0-2]|0?[1-9])\s*월/);
+  if(m)return {year:new Date().getFullYear(),month:Number(m[1])};
+  return null;
+}
+function addMonth(ym,delta){
+  const d=new Date(ym.year,ym.month-1+delta,1);
+  return {year:d.getFullYear(),month:d.getMonth()+1};
+}
+function ymString(ym){return ym.year+'-'+String(ym.month).padStart(2,'0')}
+function workbookYm(file,wb){
+  const texts=[file?.name||'',...wb.worksheets.map(x=>x.name||'')];
+  for(const t of texts){const ym=parseYmText(t);if(ym)return ym}
+  return null;
+}
+function tryAutoMonthFromNames(){
+  const d=dcmFile?parseYmText(dcmFile.name):null;
+  const s=sapFile?parseYmText(sapFile.name):null;
+  let target=d||(s?addMonth(s,1):null);
+  if(target)$('targetMonth').value=ymString(target);
+}
+function ready(){
+  $('analyzeBtn').disabled=!(dcmFile&&sapFile);
+  $('downloadBtn').disabled=true;
+  analysis=null;
+  tryAutoMonthFromNames();
+}
 const now=new Date();$('targetMonth').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
 async function load(f){const w=new ExcelJS.Workbook();await w.xlsx.load(await f.arrayBuffer());return w}
 function sheet(w,k){if(k==='dcm')return w.worksheets.find(s=>String(val(s,5,2)).includes('실납코드')&&String(val(s,5,4)).includes('채널'))||w.worksheets[0];return w.worksheets.find(s=>String(val(s,1,17)).includes('실납처')&&String(val(s,1,22)).includes('채널'))||w.worksheets[0]}
 function dmap(ws){const p=new Map(),t=new Map();let rows=0;for(let r=8;r<=ws.rowCount;r++){const c=code(val(ws,r,2)),h=String(val(ws,r,4)||'').trim();if(!c||!h)continue;rows++;const k=c+'|'+h;p.set(k,(p.get(k)||0)+num(val(ws,r,12)));t.set(k,(t.get(k)||0)+num(val(ws,r,14)))}return{prev:p,total:t,rows}}
 function smap(ws){const cash=new Map(),note=new Map();let rows=0;for(let r=2;r<=ws.rowCount;r++){const c=code(val(ws,r,17)),h=String(val(ws,r,22)||'').trim();if(!c||!h)continue;const pr=String(val(ws,r,25)||''),cashFlag=pr.includes('콩코르')||pr.includes('크레스토'),amt=num(val(ws,r,49))+num(val(ws,r,52)),k=c+'|'+h,m=cashFlag?cash:note;rows++;m.set(k,(m.get(k)||0)+amt)}return{cash,note,rows}}
 function calc(d,s){const rows=[];let matched=0,unmatched=0;for(const x of T){const k=x.code+'|'+x.ch,exc=(x.ch==='DW24'&&EX.has(x.code))||(x.code==='10093445'&&(x.ch==='DW21'||x.ch==='DW22'));let amt=0,src='';if(exc){amt=d.total.get(k)||0;src='DCM 합계'}else if(SCH.has(x.ch)){amt=(x.payType==='현금'?s.cash:s.note).get(k)||0;src='SAP '+x.payType}else{amt=d.prev.get(k)||0;src='DCM 전월'}const found=amt!==0||(exc?d.total.has(k):SCH.has(x.ch)?(x.payType==='현금'?s.cash:s.note).has(k):d.prev.has(k));found?matched++:unmatched++;rows.push({...x,amount:amt,final:amt,source:src,found,isExc:exc})}for(const g of G){const a=rows.filter(x=>x.group===g),sum=a.reduce((q,x)=>q+x.amount,0),diff=(sum<=0?0:Math.ceil(sum/1000000)*1000000)-sum;if(diff>0&&a.length){let m=a[0];for(const x of a)if(x.amount>m.amount)m=x;m.final+=diff}}return{rows,matched,unmatched}}
-function show(a,dr,sr){$('summary').style.display='grid';$('resultCard').style.display='block';$('mDcm').textContent=dr.toLocaleString();$('mSap').textContent=sr.toLocaleString();const z={};G.forEach(g=>z[g]=a.rows.filter(x=>x.group===g).reduce((q,x)=>q+x.final,0));$('m1').textContent=fmt(z['약국현금']);$('m2').textContent=fmt(z['병원현금']);$('m3').textContent=fmt(z['도입현금']);$('m4').textContent=fmt(z['도입어음']);$('matchInfo').textContent='매칭 '+a.matched+'건 · 미매칭 '+a.unmatched+'건';$('resultBody').innerHTML=a.rows.map(x=>'<tr><td>'+x.group+'</td><td>'+x.name+'</td><td>'+x.ch+'</td><td class="num">'+fmt(x.amount)+'</td><td class="num">'+fmt(x.final)+'</td><td><span class="tag '+(!x.found?'none':x.isExc?'exc':x.source.startsWith('SAP')?'sap':'dcm')+'">'+(!x.found?'미매칭':x.source)+'</span></td></tr>').join('')}
-$('analyzeBtn').addEventListener('click',async()=>{try{$('analyzeBtn').disabled=true;status('파일 구조를 확인하고 수금대상을 계산하고 있습니다.');const [dw,sw]=await Promise.all([load(dcmFile),load(sapFile)]),ds=sheet(dw,'dcm'),ss=sheet(sw,'sap');if(!ds||!ss)throw new Error('필수 시트를 찾을 수 없습니다.');const d=dmap(ds),s=smap(ss),c=calc(d,s);analysis={calc:c,dws:ds,sws:ss};show(c,d.rows,s.rows);$('downloadBtn').disabled=false;status(c.unmatched?'계산 완료: '+c.matched+'건 매칭, '+c.unmatched+'건 미매칭입니다.':'계산 완료: 대상 '+c.matched+'건이 모두 매칭되었습니다.',c.unmatched?'':'good')}catch(e){status('오류: '+e.message,'bad')}finally{$('analyzeBtn').disabled=false}});
+function show(a){
+  $('summary').style.display='grid';$('resultCard').style.display='block';
+  const z={};G.forEach(g=>z[g]=a.rows.filter(x=>x.group===g).reduce((q,x)=>q+x.final,0));
+  const cash=z['약국현금']+z['병원현금']+z['도입현금'];
+  const note=z['도입어음'];
+  $('mCash').textContent=fmt(cash);
+  $('mNote').textContent=fmt(note);
+  $('mTotal').textContent=fmt(cash+note);
+  $('matchInfo').textContent='매칭 '+a.matched+'건 · 미매칭 '+a.unmatched+'건';
+  $('resultBody').innerHTML=a.rows.map(x=>'<tr><td>'+x.group+'</td><td>'+x.name+'</td><td>'+x.ch+'</td><td class="num">'+fmt(x.amount)+'</td><td class="num">'+fmt(x.final)+'</td><td><span class="tag '+(!x.found?'none':x.isExc?'exc':x.source.startsWith('SAP')?'sap':'dcm')+'">'+(!x.found?'미매칭':x.source)+'</span></td></tr>').join('')
+}
+$('analyzeBtn').addEventListener('click',async()=>{
+  try{
+    $('analyzeBtn').disabled=true;status('파일 구조와 대상 월을 확인하고 수금대상을 계산하고 있습니다.');
+    const [dw,sw]=await Promise.all([load(dcmFile),load(sapFile)]),ds=sheet(dw,'dcm'),ss=sheet(sw,'sap');
+    if(!ds||!ss)throw new Error('필수 시트를 찾을 수 없습니다.');
+    const dYm=workbookYm(dcmFile,dw), sYm=workbookYm(sapFile,sw);
+    let target=dYm||(sYm?addMonth(sYm,1):null);
+    if(target)$('targetMonth').value=ymString(target);
+    let monthMsg='';
+    if(dYm&&sYm){
+      const expect=addMonth(sYm,1);
+      if(dYm.year===expect.year&&dYm.month===expect.month) monthMsg=' · 대상월 '+dYm.year+'년 '+dYm.month+'월 (DCM 당월 / SAP 전월)';
+      else monthMsg=' · 월 확인 필요: DCM '+dYm.month+'월 / SAP '+sYm.month+'월';
+    }else if(dYm) monthMsg=' · 대상월 '+dYm.year+'년 '+dYm.month+'월 (DCM 기준)';
+    else if(sYm) monthMsg=' · 대상월 '+target.year+'년 '+target.month+'월 (SAP 전월 기준)';
+    const d=dmap(ds),sm=smap(ss),c=calc(d,sm);
+    analysis={calc:c,dws:ds,sws:ss,targetMonth:$('targetMonth').value};
+    show(c);$('downloadBtn').disabled=false;
+    status((c.unmatched?'계산 완료: '+c.matched+'건 매칭, '+c.unmatched+'건 미매칭':'계산 완료: 대상 '+c.matched+'건 모두 매칭')+monthMsg,c.unmatched?'':'good');
+  }catch(e){status('오류: '+e.message,'bad')}
+  finally{$('analyzeBtn').disabled=false}
+});
 
 function copy(src,wb,name){
   const dst=wb.addWorksheet(name);
