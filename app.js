@@ -215,9 +215,13 @@ function applyMonth(ws,c,month){
     ws.getCell(r,fc).value=arr.reduce((s,x)=>s+x.final,0);
   });
   const tl=ws.getColumn(tc).letter,fl=ws.getColumn(fc).letter;
-  ws.getCell(1,tc).value={formula:tl+'16+'+tl+'36+'+tl+'45'}; ws.getCell(1,fc).value={formula:fl+'16+'+fl+'36+'+fl+'45'};
-  ws.getCell(2,tc).value={formula:tl+'52'}; ws.getCell(2,fc).value={formula:fl+'52'};
-  ws.getCell(3,tc).value={formula:tl+'1+'+tl+'2'}; ws.getCell(3,fc).value={formula:fl+'1+'+fl+'2'};
+  const cashRaw=['약국현금','병원현금','도입현금'].reduce((q,g)=>q+c.rows.filter(x=>x.group===g).reduce((a,x)=>a+x.amount,0),0);
+  const cashFinal=['약국현금','병원현금','도입현금'].reduce((q,g)=>q+c.rows.filter(x=>x.group===g).reduce((a,x)=>a+x.final,0),0);
+  const noteRaw=c.rows.filter(x=>x.group==='도입어음').reduce((a,x)=>a+x.amount,0);
+  const noteFinal=c.rows.filter(x=>x.group==='도입어음').reduce((a,x)=>a+x.final,0);
+  ws.getCell(1,tc).value={formula:tl+'16+'+tl+'36+'+tl+'45',result:cashRaw}; ws.getCell(1,fc).value={formula:fl+'16+'+fl+'36+'+fl+'45',result:cashFinal};
+  ws.getCell(2,tc).value={formula:tl+'52',result:noteRaw}; ws.getCell(2,fc).value={formula:fl+'52',result:noteFinal};
+  ws.getCell(3,tc).value={formula:tl+'1+'+tl+'2',result:cashRaw+noteRaw}; ws.getCell(3,fc).value={formula:fl+'1+'+fl+'2',result:cashFinal+noteFinal};
   return mc;
 }
 function openDb(){
@@ -243,6 +247,64 @@ async function loadBaseWorkbook(selectedMonth){
     try{const wb=new ExcelJS.Workbook();await wb.xlsx.load(saved.buffer);return{wb,source:'이전 누적 파일('+saved.month+')'}}catch(e){console.warn('saved workbook ignored',e)}
   }
   return{wb:buildBaseWorkbook(),source:'10월 기본 샘플'};
+}
+
+function cellText(cell){
+  const v=cell.value;
+  if(v==null)return '';
+  if(typeof v==='object'&&v.formula!==undefined)return v.result==null?'':String(v.result);
+  if(typeof v==='object'&&v.result!==undefined)return String(v.result);
+  if(typeof v==='number')return Math.round(v).toLocaleString('ko-KR');
+  return String(v);
+}
+function argbToCss(argb){
+  const x=String(argb||'').replace('#','');
+  if(x.length===8)return '#'+x.slice(2);
+  if(x.length===6)return '#'+x;
+  return null;
+}
+async function renderExcelPreview(calcResult,month){
+  try{
+    const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
+    const mc=applyMonth(ws,calcResult,month),maxCol=Math.max(7,mc.final);
+    const visibleRows=[];for(let r=1;r<=52;r++)if(!ws.getRow(r).hidden)visibleRows.push(r);
+    const widths=[];let totalW=0;
+    for(let c=1;c<=maxCol;c++){const w=Math.max(58,Math.min(260,(ws.getColumn(c).width||12)*7.2));widths.push(w);totalW+=w}
+    const rowH=24,scale=1.45,canvas=$('previewCanvas'),ctx=canvas.getContext('2d');
+    canvas.width=Math.round(totalW*scale);canvas.height=Math.round((visibleRows.length*rowH+2)*scale);
+    ctx.scale(scale,scale);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,totalW,visibleRows.length*rowH+2);
+    let y=0;
+    visibleRows.forEach((r,ri)=>{
+      let x=0;
+      for(let c=1;c<=maxCol;c++){
+        const cell=ws.getCell(r,c),w=widths[c-1];
+        let fill='#ffffff';
+        const fg=cell.fill&&cell.fill.fgColor&&cell.fill.fgColor.argb?argbToCss(cell.fill.fgColor.argb):null;
+        if(fg)fill=fg;
+        if(r===6&&!fg)fill='#f1f3f5';
+        ctx.fillStyle=fill;ctx.fillRect(x,y,w,rowH);
+        ctx.strokeStyle='#555';ctx.lineWidth=.6;ctx.strokeRect(x,y,w,rowH);
+        let text=cellText(cell);
+        if((c>=6)&&text&&/^[-\d,]+$/.test(text))text=text==='0'?'-':text;
+        const bold=!!(cell.font&&cell.font.bold);
+        const size=(cell.font&&cell.font.size)||9;
+        ctx.font=(bold?'700 ':'400 ')+Math.max(8,Math.min(13,size))+'px Arial, sans-serif';
+        ctx.fillStyle='#111';
+        ctx.textBaseline='middle';
+        const isNum=c>=6&&r!==6;
+        ctx.textAlign=isNum?'right':(c===1||c===3||c===5?'center':'left');
+        const tx=isNum?x+w-5:(ctx.textAlign==='center'?x+w/2:x+5);
+        const maxText=w-10;
+        while(ctx.measureText(text).width>maxText&&text.length>4)text=text.slice(0,-2)+'…';
+        ctx.fillText(text,tx,y+rowH/2);
+        x+=w;
+      }
+      y+=rowH;
+    });
+    $('previewImage').src=canvas.toDataURL('image/png');
+    $('previewShell').style.display='block';$('previewEmpty').style.display='none';
+    $('previewSub').textContent=mc.year+'년 '+mc.month+'월 생성 파일 첫 시트 · '+ws.getColumn(mc.target).letter+'/'+ws.getColumn(mc.final).letter+'열 반영';
+  }catch(e){console.error('preview error',e);$('previewSub').textContent='미리보기 생성 중 오류가 발생했습니다.'}
 }
 $('downloadBtn').addEventListener('click',async()=>{
   try{
