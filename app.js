@@ -1,6 +1,6 @@
 
 const $=id=>document.getElementById(id);
-let dcmFile=null,sapFile=null,analysis=null;
+let dcmFile=null,sapFile=null,analysis=null,previewJpgUrl='';
 let gigoShared={version:1,months:{}}, masterOn=false;
 const T=[
 ['약국현금','현금','10039905','대구가톨릭대학교의료원','DW35'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW35'],['약국현금','현금','10039905','대구가톨릭대학교의료원','DW30'],['약국현금','현금','10040464','(재)천주교부산교구메리놀병원','DW30'],['약국현금','현금','10040911','창원파티마병원','DW30'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW30'],['약국현금','현금','10093445','주식회사기고(GIGO)','DW18'],
@@ -29,7 +29,7 @@ function setFileBox(kind,file){
 async function acceptFiles(list){
   const files=Array.from(list||[]).filter(f=>/\.xlsx$/i.test(f.name));
   if(files.length!==2){status('DCM 수금내역서와 SAP매출 .xlsx 파일 2개를 함께 선택해 주세요.','bad');return}
-  dcmFile=null;sapFile=null;analysis=null;setFileBox('dcm',null);setFileBox('sap',null);
+  dcmFile=null;sapFile=null;analysis=null;previewJpgUrl='';if($('saveJpgBtn'))$('saveJpgBtn').disabled=true;setFileBox('dcm',null);setFileBox('sap',null);
   $('downloadBtn').disabled=true;$('analyzeBtn').disabled=true;
   status('두 파일의 구조를 확인해 DCM과 SAP을 자동 인식하고 있습니다.');
   try{
@@ -347,49 +347,122 @@ function argbToCss(argb){
   if(x.length===6)return '#'+x;
   return null;
 }
+
+function previewMerges(ws){
+  const out=[];
+  try{
+    const src=ws._merges||{};
+    for(const m of Object.values(src)){
+      if(m&&Number.isFinite(m.top)&&Number.isFinite(m.left))out.push({top:m.top,left:m.left,bottom:m.bottom,right:m.right});
+      else if(m&&m.model)out.push({top:m.model.top,left:m.model.left,bottom:m.model.bottom,right:m.model.right});
+    }
+  }catch(_){}
+  return out;
+}
+function previewMergeAt(merges,r,c){
+  for(const m of merges)if(r>=m.top&&r<=m.bottom&&c>=m.left&&c<=m.right)return m;
+  return null;
+}
+function previewCellText(cell){
+  const v=cell.value;
+  if(v==null)return '';
+  if(typeof v==='object'&&v.formula!==undefined)return v.result==null?'':String(v.result);
+  if(typeof v==='object'&&v.result!==undefined)return String(v.result);
+  if(typeof v==='object'&&v.text!==undefined)return String(v.text);
+  if(typeof v==='number')return Math.round(v).toLocaleString('ko-KR');
+  return String(v);
+}
+function previewAlign(cell,r,c){
+  const a=cell.alignment?.horizontal;
+  if(a==='center'||a==='right'||a==='left')return a;
+  if(r===6)return 'center';
+  if(c>=6)return 'right';
+  if(c===1||c===3||c===5)return 'center';
+  return 'left';
+}
+function drawPreviewText(ctx,text,x,y,w,h,align,fontSize,bold){
+  if(!text)return;
+  ctx.font=(bold?'700 ':'400 ')+fontSize+'px Arial, sans-serif';
+  ctx.fillStyle='#111';
+  ctx.textBaseline='middle';
+  ctx.textAlign=align;
+  const pad=6,maxW=Math.max(8,w-pad*2);
+  let t=String(text);
+  while(t.length>2&&ctx.measureText(t).width>maxW)t=t.slice(0,-2)+'…';
+  const tx=align==='right'?x+w-pad:align==='center'?x+w/2:x+pad;
+  ctx.fillText(t,tx,y+h/2);
+}
 async function renderExcelPreview(calcResult,month){
   try{
     const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
-    const mc=applyMonth(ws,calcResult,month),maxCol=Math.max(7,mc.final);
-    const visibleRows=[];for(let r=1;r<=52;r++)if(!ws.getRow(r).hidden)visibleRows.push(r);
-    const widths=[];let totalW=0;
-    for(let c=1;c<=maxCol;c++){const w=Math.max(58,Math.min(260,(ws.getColumn(c).width||12)*7.2));widths.push(w);totalW+=w}
-    const rowH=24,scale=1.45,canvas=$('previewCanvas'),ctx=canvas.getContext('2d');
-    canvas.width=Math.round(totalW*scale);canvas.height=Math.round((visibleRows.length*rowH+2)*scale);
-    ctx.scale(scale,scale);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,totalW,visibleRows.length*rowH+2);
-    let y=0;
-    visibleRows.forEach((r,ri)=>{
-      let x=0;
-      for(let c=1;c<=maxCol;c++){
-        const cell=ws.getCell(r,c),w=widths[c-1];
+    applyMonth(ws,calcResult,month);
+
+    const firstCol=1,lastCol=8,firstRow=1,lastRow=52;
+    const widths=[],xPos=[0],rowHeights=[],yPos=[0];
+    for(let c=firstCol;c<=lastCol;c++){
+      const px=Math.max(54,Math.min(280,(ws.getColumn(c).width||12)*7.2));
+      widths.push(px);xPos.push(xPos.at(-1)+px);
+    }
+    for(let r=firstRow;r<=lastRow;r++){
+      const px=Math.max(18,Math.min(42,ws.getRow(r).height||22));
+      rowHeights.push(px);yPos.push(yPos.at(-1)+px);
+    }
+    const totalW=xPos.at(-1),totalH=yPos.at(-1),scale=1.8;
+    const canvas=$('previewCanvas'),ctx=canvas.getContext('2d');
+    canvas.width=Math.round(totalW*scale);canvas.height=Math.round(totalH*scale);
+    ctx.setTransform(scale,0,0,scale,0,0);
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,totalW,totalH);
+
+    const merges=previewMerges(ws),skip=new Set();
+    for(let r=firstRow;r<=lastRow;r++){
+      for(let c=firstCol;c<=lastCol;c++){
+        const k=r+':'+c;if(skip.has(k))continue;
+        const m=previewMergeAt(merges,r,c);
+        if(m&&(m.top!==r||m.left!==c))continue;
+        let x=xPos[c-firstCol],y=yPos[r-firstRow],w=widths[c-firstCol],h=rowHeights[r-firstRow];
+        if(m){
+          const l=Math.max(m.left,firstCol),rr=Math.min(m.right,lastCol),t=Math.max(m.top,firstRow),bb=Math.min(m.bottom,lastRow);
+          if(l<=rr&&t<=bb){
+            x=xPos[l-firstCol];y=yPos[t-firstRow];
+            w=xPos[rr-firstCol+1]-x;h=yPos[bb-firstRow+1]-y;
+            for(let mr=t;mr<=bb;mr++)for(let mc=l;mc<=rr;mc++)if(!(mr===r&&mc===c))skip.add(mr+':'+mc);
+          }
+        }
+        const cell=ws.getCell(r,c);
         let fill='#ffffff';
-        const fg=cell.fill&&cell.fill.fgColor&&cell.fill.fgColor.argb?argbToCss(cell.fill.fgColor.argb):null;
-        if(fg)fill=fg;
-        if(r===6&&!fg)fill='#f1f3f5';
-        ctx.fillStyle=fill;ctx.fillRect(x,y,w,rowH);
-        ctx.strokeStyle='#555';ctx.lineWidth=.6;ctx.strokeRect(x,y,w,rowH);
-        let text=cellText(cell);
-        if((c>=6)&&text&&/^[-\d,]+$/.test(text))text=text==='0'?'-':text;
-        const bold=!!(cell.font&&cell.font.bold);
-        const size=(cell.font&&cell.font.size)||9;
-        ctx.font=(bold?'700 ':'400 ')+Math.max(8,Math.min(13,size))+'px Arial, sans-serif';
-        ctx.fillStyle='#111';
-        ctx.textBaseline='middle';
-        const isNum=c>=6&&r!==6;
-        ctx.textAlign=isNum?'right':(c===1||c===3||c===5?'center':'left');
-        const tx=isNum?x+w-5:(ctx.textAlign==='center'?x+w/2:x+5);
-        const maxText=w-10;
-        while(ctx.measureText(text).width>maxText&&text.length>4)text=text.slice(0,-2)+'…';
-        ctx.fillText(text,tx,y+rowH/2);
-        x+=w;
+        const argb=cell.fill?.fgColor?.argb;
+        if(argb)fill='#'+String(argb).slice(-6);
+        else if(r===6)fill='#f1f3f5';
+        ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
+        ctx.strokeStyle='#222';ctx.lineWidth=.7;ctx.strokeRect(x,y,w,h);
+        let text=previewCellText(cell);
+        if(c>=6&&/^[-\d,]+$/.test(text))text=text==='0'?'-':text;
+        const align=previewAlign(cell,r,c);
+        const fontSize=Math.max(8,Math.min(14,cell.font?.size||9));
+        drawPreviewText(ctx,text,x,y,w,h,align,fontSize,!!cell.font?.bold);
       }
-      y+=rowH;
-    });
-    $('previewImage').src=canvas.toDataURL('image/png');
-    $('previewShell').style.display='block';$('previewEmpty').style.display='none';
-    $('previewSub').textContent=mc.year+'년 '+mc.month+'월 생성 파일 첫 시트 · '+ws.getColumn(mc.target).letter+'/'+ws.getColumn(mc.final).letter+'열 반영';
-  }catch(e){console.error('preview error',e);$('previewSub').textContent='미리보기 생성 중 오류가 발생했습니다.'}
+    }
+    const png=canvas.toDataURL('image/png');
+    previewJpgUrl=canvas.toDataURL('image/jpeg',0.96);
+    $('previewImage').src=png;
+    $('previewShell').style.display='flex';$('previewEmpty').style.display='none';
+    $('previewSub').textContent=month+' 기준 · A1:H52 전체 미리보기';
+    if($('saveJpgBtn'))$('saveJpgBtn').disabled=false;
+  }catch(e){
+    console.error('preview error',e);
+    $('previewSub').textContent='미리보기 생성 중 오류가 발생했습니다.';
+    if($('saveJpgBtn'))$('saveJpgBtn').disabled=true;
+  }
 }
+$('saveJpgBtn')?.addEventListener('click',()=>{
+  if(!previewJpgUrl)return;
+  const month=$('targetMonth').value||'';
+  const [yy,mm]=month.split('-');
+  const a=document.createElement('a');
+  a.href=previewJpgUrl;
+  a.download='기고 수금내역_'+(yy||'')+'-'+(mm||'')+'_A1-H52.jpg';
+  a.click();
+});
 $('masterLoginBtn')?.addEventListener('click',masterLogin);
 $('masterRefreshBtn')?.addEventListener('click',()=>pullSharedData(true));
 $('masterSaveBtn')?.addEventListener('click',saveMasterCurrent);
