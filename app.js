@@ -372,6 +372,32 @@ function previewCellText(cell){
   if(typeof v==='number')return Math.round(v).toLocaleString('ko-KR');
   return String(v);
 }
+function findPreviewLastRow(ws){
+  let last=6;
+  for(let r=6;r<=200;r++){
+    let has=false;
+    for(let c=1;c<=7;c++){
+      const t=previewCellText(ws.getCell(r,c));
+      if(String(t||'').trim()!==''){has=true;break}
+    }
+    if(has)last=r;
+  }
+  return last;
+}
+function previewDisplayText(cell,r,c){
+  let text=previewCellText(cell);
+  if(text==null)return '';
+  text=String(text);
+  if(c===1||c===3)return text.replace(/,/g,'');
+  if((c===6||c===7)&&text){
+    const raw=text.replace(/,/g,'');
+    if(/^-?\d+(\.\d+)?$/.test(raw)){
+      const n=Number(raw);
+      if(Number.isFinite(n))return Math.round(n).toLocaleString('ko-KR');
+    }
+  }
+  return text;
+}
 function previewAlign(cell,r,c){
   const a=cell.alignment?.horizontal;
   if(a==='center'||a==='right'||a==='left')return a;
@@ -397,16 +423,18 @@ async function renderExcelPreview(calcResult,month){
     const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
     applyMonth(ws,calcResult,month);
 
-    const firstCol=1,lastCol=8,firstRow=1,lastRow=52;
+    const firstCol=1,lastCol=7,firstRow=6,lastRow=findPreviewLastRow(ws);
     const widths=[],xPos=[0],rowHeights=[],yPos=[0];
+
     for(let c=firstCol;c<=lastCol;c++){
-      const px=Math.max(54,Math.min(280,(ws.getColumn(c).width||12)*7.2));
+      const px=Math.max(54,Math.min(320,(ws.getColumn(c).width||12)*7.2));
       widths.push(px);xPos.push(xPos.at(-1)+px);
     }
     for(let r=firstRow;r<=lastRow;r++){
       const px=Math.max(18,Math.min(42,ws.getRow(r).height||22));
       rowHeights.push(px);yPos.push(yPos.at(-1)+px);
     }
+
     const totalW=xPos.at(-1),totalH=yPos.at(-1),scale=1.8;
     const canvas=$('previewCanvas'),ctx=canvas.getContext('2d');
     canvas.width=Math.round(totalW*scale);canvas.height=Math.round(totalH*scale);
@@ -419,6 +447,7 @@ async function renderExcelPreview(calcResult,month){
         const k=r+':'+c;if(skip.has(k))continue;
         const m=previewMergeAt(merges,r,c);
         if(m&&(m.top!==r||m.left!==c))continue;
+
         let x=xPos[c-firstCol],y=yPos[r-firstRow],w=widths[c-firstCol],h=rowHeights[r-firstRow];
         if(m){
           const l=Math.max(m.left,firstCol),rr=Math.min(m.right,lastCol),t=Math.max(m.top,firstRow),bb=Math.min(m.bottom,lastRow);
@@ -428,6 +457,7 @@ async function renderExcelPreview(calcResult,month){
             for(let mr=t;mr<=bb;mr++)for(let mc=l;mc<=rr;mc++)if(!(mr===r&&mc===c))skip.add(mr+':'+mc);
           }
         }
+
         const cell=ws.getCell(r,c);
         let fill='#ffffff';
         const argb=cell.fill?.fgColor?.argb;
@@ -435,18 +465,20 @@ async function renderExcelPreview(calcResult,month){
         else if(r===6)fill='#f1f3f5';
         ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
         ctx.strokeStyle='#222';ctx.lineWidth=.7;ctx.strokeRect(x,y,w,h);
-        let text=previewCellText(cell);
-        if(c>=6&&/^[-\d,]+$/.test(text))text=text==='0'?'-':text;
+
+        let text=previewDisplayText(cell,r,c);
+        if((c===6||c===7)&&String(text).trim()==='0')text='-';
         const align=previewAlign(cell,r,c);
         const fontSize=Math.max(8,Math.min(14,cell.font?.size||9));
         drawPreviewText(ctx,text,x,y,w,h,align,fontSize,!!cell.font?.bold);
       }
     }
+
     const png=canvas.toDataURL('image/png');
     previewJpgUrl=canvas.toDataURL('image/jpeg',0.96);
     $('previewImage').src=png;
     $('previewShell').style.display='flex';$('previewEmpty').style.display='none';
-    $('previewSub').textContent=month+' 기준 · A1:H52 전체 미리보기';
+    $('previewSub').textContent=month+' 기준 · 6행부터 G열까지 전체 미리보기';
     if($('saveJpgBtn'))$('saveJpgBtn').disabled=false;
   }catch(e){
     console.error('preview error',e);
@@ -460,7 +492,7 @@ $('saveJpgBtn')?.addEventListener('click',()=>{
   const [yy,mm]=month.split('-');
   const a=document.createElement('a');
   a.href=previewJpgUrl;
-  a.download='기고 수금내역_'+(yy||'')+'-'+(mm||'')+'_A1-H52.jpg';
+  a.download='기고 수금내역_'+(yy||'')+'-'+(mm||'')+'_미리보기.jpg';
   a.click();
 });
 $('masterLoginBtn')?.addEventListener('click',masterLogin);
