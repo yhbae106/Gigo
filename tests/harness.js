@@ -19,6 +19,8 @@ ok(js.includes("saveJpgBtn"),'JPG button wiring');
 ok(js.includes('previewMerges')&&js.includes('previewMergeAt'),'merged-cell rendering');
 ok(js.includes('gigoLoad')&&js.includes('gigoSave')&&js.includes('gigoMasterLogin'),'cross-browser master sync');
 ok(js.includes('downloadSharedWorkbook')&&js.includes('sharedDownloadBtn'),'public shared workbook download');
+ok(js.includes('serializeSharedSheet')&&js.includes('addSharedSourceSheet'),'shared workbook carries DCM/SAP source sheets');
+ok(js.includes("source:{dcm:serializeSharedSheet(analysis.dws),sap:serializeSharedSheet(analysis.sws)}"),'master save stores DCM/SAP sheet payloads');
 ok(/endpoint:\s*'https:\/\/script\.google\.com\/macros\/s\//.test(cfg),'Apps Script endpoint configured');
 if(process.exitCode)process.exit(process.exitCode);
 console.log('Gigo harness passed.');
