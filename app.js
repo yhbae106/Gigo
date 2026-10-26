@@ -100,7 +100,7 @@ async function pullSharedData(render=true){
 }
 async function masterLogin(){
   if(masterOn){sessionStorage.removeItem('gigo-master-password');setMasterUI(false);masterStatus('마스터 모드를 종료했습니다.');return}
-  const pw=$('masterPassword')?.value||'';
+  const pw=String($('masterPassword')?.value||'').trim();
   if(!pw){masterStatus('마스터 비밀번호를 입력해 주세요.','bad');return}
   try{
     masterStatus('마스터 인증 중…');
