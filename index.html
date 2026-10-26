@@ -38,11 +38,12 @@
       <div><h3>공용 데이터 · 마스터모드</h3><p>마스터 저장값은 브라우저가 달라도 동일하게 불러옵니다.</p></div>
       <span class="pill" id="masterBadge">읽기 전용</span>
     </div>
-    <div class="actionrow" style="grid-template-columns:minmax(180px,240px) 150px 160px 190px">
+    <div class="actionrow" style="grid-template-columns:minmax(180px,240px) 150px 160px 190px 190px">
       <div class="field"><label>마스터 비밀번호</label><input type="password" id="masterPassword" autocomplete="current-password" placeholder="마스터 비밀번호"></div>
       <button class="btn" id="masterLoginBtn">마스터 로그인</button>
       <button class="btn" id="masterRefreshBtn">공용 새로고침</button>
       <button class="btn primary" id="masterSaveBtn" disabled>현재 월 공용 저장</button>
+      <button class="btn" id="sharedDownloadBtn" disabled>공용 엑셀 다운로드</button>
     </div>
     <div id="masterStatus" class="status">공용 저장소 연결 상태를 확인하고 있습니다.</div>
   </section>
@@ -104,6 +105,6 @@
 </div>
 <canvas id="previewCanvas" style="display:none"></canvas>
 <script src="sync-config.js?v=20261026-2"></script>
-<script src="app.js?v=20261026-17"></script>
+<script src="app.js?v=20261026-18"></script>
 </body>
 </html>
