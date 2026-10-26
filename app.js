@@ -36,116 +36,107 @@ function copy(src,wb,name){
 }
 function makeSharedSheet(wb,c,month){
   const ws=wb.addWorksheet('수금내역서',{views:[{showGridLines:false}]});
-  const widths=[12.2,10.6,10.2,22.1,9.6,14.0,17.1,9.7];
-  widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
-  for(let r=1;r<=52;r++) ws.getRow(r).height=22.8;
+  // 원본 공유용 구조: A:V 숨김, W:AD 출력영역
+  for(let i=1;i<=22;i++) ws.getColumn(i).hidden=true;
+  const widths={23:12.199,24:10.598,25:10.199,26:22.098,27:9.598,28:14.0,29:17.098,30:14.0};
+  Object.entries(widths).forEach(([i,w])=>ws.getColumn(Number(i)).width=w);
+  for(let r=1;r<=56;r++) ws.getRow(r).height=22.8;
+  [14,15,31,32,33,34,35].forEach(r=>ws.getRow(r).hidden=true);
 
   const thin={style:'thin',color:{argb:'FF000000'}};
   const border={top:thin,left:thin,bottom:thin,right:thin};
   const numFmt='_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
-  const font9={name:'맑은 고딕',size:9};
-  const font11={name:'맑은 고딕',size:11};
+  const normal={name:'맑은 고딕',size:9};
+  const amountFont={name:'맑은 고딕',size:11};
   const yellow={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
   const green={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFCC'}};
   const cyan={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFFF'}};
 
-  ws.mergeCells('D1:E3');
-  ws.getCell('D1').value='기고 수금내역';
-  ws.getCell('D1').font={name:'맑은 고딕',size:22};
-  ws.getCell('D1').alignment={horizontal:'center',vertical:'middle'};
+  ws.mergeCells('Z1:AA3');
+  ws.getCell('Z1').value='기고 수금내역';
+  ws.getCell('Z1').font={name:'맑은 고딕',size:22};
+  ws.getCell('Z1').alignment={horizontal:'center',vertical:'middle'};
 
   const cashRows=c.rows.filter(x=>x.group!=='도입어음');
   const noteRows=c.rows.filter(x=>x.group==='도입어음');
-  const cashRaw=cashRows.reduce((s,x)=>s+x.amount,0);
-  const cashFinal=cashRows.reduce((s,x)=>s+x.final,0);
-  const noteRaw=noteRows.reduce((s,x)=>s+x.amount,0);
-  const noteFinal=noteRows.reduce((s,x)=>s+x.final,0);
+  const cashRaw=cashRows.reduce((s,x)=>s+x.amount,0), cashFinal=cashRows.reduce((s,x)=>s+x.final,0);
+  const noteRaw=noteRows.reduce((s,x)=>s+x.amount,0), noteFinal=noteRows.reduce((s,x)=>s+x.final,0);
   [[cashRaw,cashFinal],[noteRaw,noteFinal],[cashRaw+noteRaw,cashFinal+noteFinal]].forEach((v,i)=>{
     const r=i+1;
-    ws.getCell(r,6).value=v[0];
-    ws.getCell(r,7).value=v[1];
-    ws.getCell(r,6).font=font11;
-    ws.getCell(r,7).font={...font11,bold:true};
-    ws.getCell(r,6).alignment={vertical:'middle'};
-    ws.getCell(r,7).alignment={vertical:'middle'};
-    ws.getCell(r,6).numFmt=numFmt;
-    ws.getCell(r,7).numFmt=numFmt;
-    ws.getCell(r,7).fill=yellow;
+    ws.getCell(r,28).value=v[0]; // AB
+    ws.getCell(r,29).value=v[1]; // AC
+    ws.getCell(r,28).numberFormat=numFmt;
+    ws.getCell(r,29).numberFormat=numFmt;
+    ws.getCell(r,28).font=amountFont;
+    ws.getCell(r,29).font={...amountFont,bold:true};
+    ws.getCell(r,29).fill=yellow;
   });
 
   const mm=(month.split('-')[1]||'').replace(/^0/,'');
   const headers=['도매상','도매상명','실납코드','실납처명','채널',(mm||'')+'월 수금대상액','최종 수금액'];
-  headers.forEach((h,i)=>{
-    const cell=ws.getCell(6,i+1);
-    cell.value=h;
-    cell.font={...font9,bold:i===6};
+  for(let i=0;i<headers.length;i++){
+    const cell=ws.getCell(6,23+i);
+    cell.value=headers[i];
+    cell.font={...normal,bold:i===6};
     cell.alignment={horizontal:'center',vertical:'middle'};
     cell.border=border;
-    if(i>=5) cell.font={name:'맑은 고딕',size:10,bold:i===6};
-  });
+    if(i>=5) cell.numberFormat=numFmt;
+  }
 
-  const positions=[7,8,9,10,11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,29,30,37,38,39,40,41,42,43,44,46,47,48,49,50,51];
+  const pos=[7,8,9,10,11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,29,30,37,38,39,40,41,42,43,44,46,47,48,49,50,51];
   c.rows.forEach((x,i)=>{
-    const r=positions[i];
-    const vals=[10093445,'주식회사기고',Number(x.code),x.name,x.ch,x.amount,x.final];
+    const r=pos[i], vals=[10093445,'주식회사기고',Number(x.code),x.name,x.ch,x.amount,x.final];
     vals.forEach((v,j)=>{
-      const cell=ws.getCell(r,j+1);
+      const cell=ws.getCell(r,23+j);
       cell.value=v;
       cell.border=border;
-      cell.alignment={vertical:'middle',horizontal:j===0||j===2||j===4?'center':undefined};
-      cell.font=j<5?font9:{...font11,bold:j===6};
-      if(j>=5) cell.numFmt=numFmt;
+      cell.font=j>=5?(j===6?{...amountFont,bold:true}:amountFont):normal;
+      cell.alignment={vertical:'middle',horizontal:(j===0||j===2||j===4)?'center':undefined};
+      if(j>=5) cell.numberFormat=numFmt;
     });
-    if(x.group==='도입현금'){
-      ws.getCell(r,6).fill=green; ws.getCell(r,7).fill=green;
-    }
-    if(x.group==='도입어음'){
-      ws.getCell(r,6).fill=cyan; ws.getCell(r,7).fill=cyan;
-    }
+    if(x.group==='도입현금'){ws.getCell(r,28).fill=green;ws.getCell(r,29).fill=green;}
+    if(x.group==='도입어음'){ws.getCell(r,28).fill=cyan;ws.getCell(r,29).fill=cyan;}
   });
 
+  // 원본의 빈 행도 테두리/숫자서식 유지
   for(let r=6;r<=52;r++){
-    for(let cidx=1;cidx<=7;cidx++){
+    for(let cidx=23;cidx<=29;cidx++){
       const cell=ws.getCell(r,cidx);
       cell.border=border;
-      if(!cell.font || !cell.font.name) cell.font=cidx<=5?font9:font11;
-      if(cidx>=6) cell.numFmt=numFmt;
+      if(cidx>=28) cell.numberFormat=numFmt;
     }
   }
 
-  const totalRows={
+  const totals={
     '약국현금':{row:16,type:'현금'},
     '병원현금':{row:36,type:'현금'},
     '도입현금':{row:45,type:'현금'},
     '도입어음':{row:52,type:'어음'}
   };
-  Object.entries(totalRows).forEach(([g,info])=>{
-    const arr=c.rows.filter(x=>x.group===g);
-    const raw=arr.reduce((s,x)=>s+x.amount,0);
-    const fin=arr.reduce((s,x)=>s+x.final,0);
-    const r=info.row;
-    ws.getCell(r,1).value='합계';
-    ws.getCell(r,2).value=info.type;
-    ws.getCell(r,6).value=raw;
-    ws.getCell(r,7).value=fin;
-    ws.getCell(r,8).value=g;
-    for(let j=1;j<=7;j++){
-      const cell=ws.getCell(r,j);
+  Object.entries(totals).forEach(([g,info])=>{
+    const arr=c.rows.filter(x=>x.group===g), raw=arr.reduce((s,x)=>s+x.amount,0), fin=arr.reduce((s,x)=>s+x.final,0), r=info.row;
+    ws.getCell(r,23).value='합계';
+    ws.getCell(r,24).value=info.type;
+    ws.getCell(r,28).value=raw;
+    ws.getCell(r,29).value=fin;
+    ws.getCell(r,30).value=g;
+    for(let ci=23;ci<=29;ci++){
+      const cell=ws.getCell(r,ci);
       cell.fill=yellow;
       cell.border=border;
-      cell.alignment={vertical:'middle',horizontal:j===1?'center':undefined};
-      cell.font=j<=5?font9:{...font11,bold:j===7};
-      if(j>=6) cell.numFmt=numFmt;
+      cell.font=ci===29?{...amountFont,bold:true}:normal;
+      if(ci>=28) cell.numberFormat=numFmt;
     }
-    ws.getCell(r,8).font=font9;
-    ws.getCell(r,8).alignment={vertical:'middle'};
+    ws.getCell(r,30).font=normal;
   });
 
+  // 원본처럼 출력영역만 보이도록
   ws.pageSetup.orientation='portrait';
   ws.pageSetup.fitToPage=true;
   ws.pageSetup.fitToWidth=1;
   ws.pageSetup.fitToHeight=0;
-  ws.pageSetup.printArea='A1:H52';
+  ws.pageSetup.printArea='W1:AD52';
+  ws.sheetView.showGridLines=false;
   return ws;
 }
 $('downloadBtn').addEventListener('click',async()=>{
