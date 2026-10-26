@@ -1,0 +1,20 @@
+{
+  "name": "기고 수금내역서",
+  "short_name": "기고 수금",
+  "description": "DCM·SAP 수금내역 자동 계산 및 월별 누적 엑셀 생성",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "lang": "ko-KR",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
