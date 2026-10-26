@@ -39,8 +39,10 @@ function doPost(e){
 }
 function assertGigoMaster_(pw){
   const expected=PropertiesService.getScriptProperties().getProperty(GIGO_MASTER_PROP);
-  if(!expected)throw new Error('GIGO_MASTER_PASSWORD가 설정되지 않았습니다.');
-  if(!pw||String(pw)!==expected)throw new Error('마스터 비밀번호가 올바르지 않습니다.');
+  const normalizedExpected=String(expected||'').trim();
+  const normalizedInput=String(pw||'').trim();
+  if(!normalizedExpected)throw new Error('GIGO_MASTER_PASSWORD가 설정되지 않았습니다.');
+  if(!normalizedInput||normalizedInput!==normalizedExpected)throw new Error('마스터 비밀번호가 올바르지 않습니다.');
 }
 function loadGigo_(){
   const props=PropertiesService.getScriptProperties();
