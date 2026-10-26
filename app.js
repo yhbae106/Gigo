@@ -58,7 +58,7 @@ function normalizeShared(v){
   if(v&&typeof v==='object'&&v.months&&typeof v.months==='object'){
     for(const [m,x] of Object.entries(v.months)){
       if(!/^20\d{2}-\d{2}$/.test(m)||!x||!Array.isArray(x.rows))continue;
-      out.months[m]={rows:x.rows.map(r=>({...r,amount:num(r.amount),final:num(r.final)})),matched:num(x.matched),unmatched:num(x.unmatched),savedAt:x.savedAt||''};
+      out.months[m]={rows:x.rows.map(r=>({...r,amount:num(r.amount),final:num(r.final)})),matched:num(x.matched),unmatched:num(x.unmatched),savedAt:x.savedAt||'',source:x.source&&typeof x.source==='object'?x.source:null};
     }
   }
   return out;
@@ -117,13 +117,42 @@ async function masterLogin(){
     masterStatus('마스터 인증 완료 · 현재 월 결과를 공용 저장할 수 있습니다.','good');
   }catch(e){sessionStorage.removeItem('gigo-master-password');setMasterUI(false);masterStatus('마스터 인증 실패 · '+e.message,'bad')}
 }
+function serializeSharedSheet(ws){
+  const rows=[];
+  const maxR=ws.rowCount||0,maxC=ws.columnCount||0;
+  for(let r=1;r<=maxR;r++){
+    const a=[];
+    let last=-1;
+    for(let c=1;c<=maxC;c++){
+      const v=val(ws,r,c);
+      a.push(v==null?null:v);
+      if(v!=null&&String(v)!=='')last=c-1;
+    }
+    rows.push(last>=0?a.slice(0,last+1):[]);
+  }
+  while(rows.length&&!rows.at(-1).length)rows.pop();
+  return {name:ws.name||'',rows};
+}
+function safeSheetName(name,fallback){
+  let n=String(name||fallback||'Sheet').replace(/[\\\/\?\*\[\]:]/g,' ').trim();
+  if(!n)n=fallback||'Sheet';
+  return n.slice(0,31);
+}
+function addSharedSourceSheet(wb,source,fallback){
+  if(!source||!Array.isArray(source.rows))return null;
+  let name=safeSheetName(source.name,fallback),base=name,i=2;
+  while(wb.getWorksheet(name)){name=(base.slice(0,27)+' '+i).slice(0,31);i++}
+  const ws=wb.addWorksheet(name);
+  source.rows.forEach(row=>ws.addRow(Array.isArray(row)?row:[]));
+  return ws;
+}
 async function saveMasterCurrent(){
   if(!masterOn||!analysis)return;
   const pw=sessionStorage.getItem('gigo-master-password')||'';
   const month=$('targetMonth').value||analysis.targetMonth||'';
   try{
     $('masterSaveBtn').disabled=true;masterStatus(month+' 공용 저장 중…');
-    const snap={rows:analysis.calc.rows.map(x=>({id:x.id,group:x.group,payType:x.payType,code:x.code,name:x.name,ch:x.ch,amount:x.amount,final:x.final,source:x.source,found:x.found,isExc:x.isExc})),matched:analysis.calc.matched,unmatched:analysis.calc.unmatched};
+    const snap={rows:analysis.calc.rows.map(x=>({id:x.id,group:x.group,payType:x.payType,code:x.code,name:x.name,ch:x.ch,amount:x.amount,final:x.final,source:x.source,found:x.found,isExc:x.isExc})),matched:analysis.calc.matched,unmatched:analysis.calc.unmatched,source:{dcm:serializeSharedSheet(analysis.dws),sap:serializeSharedSheet(analysis.sws)}};
     const json=await syncRequest({type:'gigoSave',password:pw,month,snapshot:snap});
     gigoShared=normalizeShared(json.data);updateSharedDownloadButton();
     masterStatus(month+' 공용 저장 완료 · 다른 브라우저에서 자동 조회됩니다.','good');
@@ -512,12 +541,29 @@ async function downloadSharedWorkbook(){
   if(!months.length){masterStatus('공용 저장된 월 데이터가 없습니다.','bad');return}
   let selected=$('targetMonth').value||'';
   if(!gigoShared.months[selected]) selected=months.at(-1);
+
   const wb=buildBaseWorkbook(),ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
   for(const m of months){
     if(m>selected)break;
     const snap=gigoShared.months[m];
     if(snap&&Array.isArray(snap.rows))applyMonth(ws,{rows:snap.rows},m);
   }
+
+  const snap=gigoShared.months[selected];
+  let dcmSheet=null,sapSheet=null;
+  if(snap?.source?.dcm)dcmSheet=addSharedSourceSheet(wb,snap.source.dcm,'DCM수금내역서');
+  if(snap?.source?.sap)sapSheet=addSharedSourceSheet(wb,snap.source.sap,'SAP매출');
+
+  if(sapSheet){
+    sapSheet.getCell(1,75).value='간납가';
+    sapSheet.getCell(1,77).value='유형';
+    for(let r=2;r<=sapSheet.rowCount;r++){
+      sapSheet.getCell(r,75).value=num(val(sapSheet,r,49))+num(val(sapSheet,r,52));
+      const p=String(val(sapSheet,r,25)||'');
+      sapSheet.getCell(r,77).value=(p.includes('콩코르')||p.includes('크레스토'))?'현금':'어음';
+    }
+  }
+
   const [yy,mm]=selected.split('-');
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -526,7 +572,9 @@ async function downloadSharedWorkbook(){
   a.download='기고 수금 내역서_'+(yy||'')+'년 '+(mm||'')+'월_공용.xlsx';
   a.click();
   URL.revokeObjectURL(a.href);
-  masterStatus((yy||'')+'년 '+(mm||'')+'월 공용 수금내역서 다운로드 완료','good');
+
+  if(dcmSheet&&sapSheet)masterStatus((yy||'')+'년 '+(mm||'')+'월 공용 엑셀 다운로드 완료 · DCM/SAP 시트 포함','good');
+  else masterStatus((yy||'')+'년 '+(mm||'')+'월 다운로드 완료 · 기존 저장 데이터는 DCM/SAP 시트가 없어 해당 월을 마스터에서 다시 공용 저장해 주세요.','bad');
 }
 $('masterLoginBtn')?.addEventListener('click',masterLogin);
 $('masterRefreshBtn')?.addEventListener('click',()=>pullSharedData(true));
