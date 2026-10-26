@@ -1,69 +1,91 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>기고 수금내역서 자동 생성</title>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <style>
-    :root{--bg:#f4f7fb;--card:#fff;--line:#dde4ee;--text:#18212f;--muted:#6e7b8d;--accent:#1367d1;--good:#11865b;--warn:#c77b00;--bad:#c53a3a}
-    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Pretendard,"Noto Sans KR",Arial,sans-serif}
-    .wrap{max-width:1180px;margin:0 auto;padding:36px 24px 60px}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:24px}.title h1{margin:0;font-size:30px;letter-spacing:-.7px}.title p{margin:8px 0 0;color:var(--muted);line-height:1.6}.badge{font-size:12px;background:#eaf2ff;color:#1d5fb7;border:1px solid #c9ddfa;padding:7px 10px;border-radius:999px;white-space:nowrap}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 7px 22px rgba(28,50,78,.05)}.card h2{font-size:17px;margin:0 0 6px}.hint{font-size:13px;color:var(--muted);margin-bottom:16px}.drop{border:1.5px dashed #b9c8db;border-radius:14px;padding:28px 18px;text-align:center;background:#fbfdff;cursor:pointer;transition:.2s}.drop:hover,.drop.drag{border-color:var(--accent);background:#f1f7ff}.drop strong{display:block;font-size:15px}.drop span{display:block;color:var(--muted);font-size:12px;margin-top:6px}.fileline{margin-top:12px;font-size:13px;color:var(--good);font-weight:700;min-height:20px}.fileline.bad{color:var(--bad)}input[type=file]{display:none}
-    .controls{margin-top:18px;display:grid;grid-template-columns:220px 1fr 180px;gap:14px;align-items:end}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}.field input{width:100%;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:white;font-size:14px}.btn{height:44px;border:0;border-radius:11px;background:var(--accent);color:white;font-size:14px;font-weight:800;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}.btn.secondary{background:#edf3fb;color:#285c9e;border:1px solid #cbdcf0}
-    .status{margin-top:18px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid var(--line);font-size:13px;line-height:1.5;color:var(--muted)}.status.good{background:#f1fbf7;border-color:#c5eadb;color:#26745a}.status.bad{background:#fff4f4;border-color:#f0c7c7;color:#a33b3b}
-    .summary{margin-top:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px}.metric .k{font-size:11px;color:var(--muted);margin-bottom:8px}.metric .v{font-size:20px;font-weight:850;letter-spacing:-.3px}.metric .s{font-size:11px;color:var(--muted);margin-top:5px}.metric.em .v{color:var(--accent)}
-    .tablecard{margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden}.tablehead{padding:17px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.tablehead h3{margin:0;font-size:16px}.tablewrap{overflow:auto;max-height:380px}table{width:100%;border-collapse:collapse;font-size:12px}th{position:sticky;top:0;background:#f7f9fc;text-align:left;color:#5b6878;font-weight:800;padding:10px 12px;border-bottom:1px solid var(--line)}td{padding:9px 12px;border-bottom:1px solid #edf1f5;white-space:nowrap}td.num{text-align:right;font-variant-numeric:tabular-nums}.tag{display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800}.tag.sap{background:#eaf2ff;color:#2160b0}.tag.dcm{background:#eef8f1;color:#29734a}.tag.exc{background:#fff3dd;color:#9a6500}.tag.none{background:#fbeaea;color:#a33b3b}
-    .rules{margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px}.rules h3{margin:0 0 10px;font-size:16px}.rules ul{margin:0;padding-left:18px;color:#526071;font-size:13px;line-height:1.75}.privacy{margin-top:14px;color:var(--muted);font-size:11px;text-align:right}
-    @media(max-width:900px){.grid{grid-template-columns:1fr}.controls{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}.top{align-items:flex-start;flex-direction:column}}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07111f">
+<title>GIGO 수금 CONTROL TOWER</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+:root{--bg:#07111f;--panel:#0e1d30;--panel2:#10243a;--line:#203a55;--text:#eef6ff;--muted:#91a9c1;--green:#59d98e;--orange:#ffb454;--red:#ff7285;--blue:#66a7ff;--teal:#4fd1c5}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#102b48 0,#07111f 45%);color:var(--text);font-family:Arial,'Noto Sans KR',sans-serif}
+.wrap{max-width:1460px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:.15em;color:var(--teal);font-weight:850}.top h1{margin:5px 0 7px;font-size:30px;letter-spacing:-.7px}.muted{color:var(--muted);font-size:13px}.pill{padding:5px 10px;border:1px solid #31506b;border-radius:999px;color:#bdd0e1;font-size:11px;white-space:nowrap}
+.panel,.metric{background:linear-gradient(180deg,#10243a,#0b1b2c);border:1px solid rgba(126,171,211,.18);border-radius:16px}.panel{padding:18px;margin-bottom:15px}
+.upload-zone{display:grid;grid-template-columns:1.5fr .8fr;gap:14px;align-items:stretch}.drop{min-height:132px;border:1px dashed #34516f;border-radius:14px;background:#081827;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:20px;text-align:center;transition:.18s}.drop:hover,.drop.drag{border-color:var(--teal);background:#0b2237}.drop .icon{font-size:28px;margin-bottom:7px}.drop strong{font-size:15px}.drop span{margin-top:6px;color:var(--muted);font-size:12px}.drop input{display:none}
+.detect{display:grid;grid-template-rows:1fr 1fr;gap:10px}.filebox{border:1px solid #203a55;border-radius:12px;background:#081827;padding:14px}.filebox .k{color:var(--muted);font-size:11px}.filebox .v{font-size:13px;font-weight:800;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.filebox.ok .v{color:var(--green)}.filebox.wait .v{color:#6f879e}
+.actionrow{display:grid;grid-template-columns:210px 1fr 190px;gap:12px;align-items:end;margin-top:14px}.field label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:6px}.field input{width:100%;height:42px;padding:0 12px;border-radius:9px;border:1px solid #29445f;background:#071522;color:var(--text);font-size:14px}.btn{height:44px;border:1px solid #31506b;border-radius:10px;background:#0b2237;color:#cfe4f6;font-weight:850;cursor:pointer}.btn.primary{background:#1469d8;border-color:#1469d8;color:#fff}.btn:disabled{opacity:.4;cursor:not-allowed}.status{margin-top:12px;border-top:1px solid #1d354c;padding-top:12px;color:var(--muted);font-size:12px}.status.good{color:var(--green)}.status.bad{color:var(--red)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:15px}.metric{padding:18px;min-height:112px}.metric .label{font-size:12px;color:#d4dfed}.metric .value{font-size:28px;font-weight:900;margin-top:9px;font-variant-numeric:tabular-nums}.metric .sub{font-size:11px;color:#b7c7db;margin-top:6px}.metric.cash .value{color:var(--green)}.metric.note .value{color:var(--orange)}.metric.total .value{color:var(--blue)}
+.section-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}.section-head h3{font-size:16px;margin:0}.section-head p{font-size:11px;color:var(--muted);margin:4px 0 0}.preview-shell{background:#d8dde5;border-radius:12px;padding:12px;overflow:auto;max-height:680px}.preview-shell img{display:block;max-width:none;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.22);border-radius:3px}.preview-empty{padding:70px 20px;text-align:center;color:#6f879e;background:#081827;border:1px dashed #34516f;border-radius:12px}
+.tablewrap{overflow:auto;max-height:400px;border:1px solid #1d354c;border-radius:11px}table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}th{position:sticky;top:0;background:#122944;color:#abc1d5;z-index:2}th,td{padding:9px 10px;border-bottom:1px solid #1d354c;white-space:nowrap}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}td.num{text-align:right}.tag{display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800}.tag.sap{background:#12335b;color:#78b3ff}.tag.dcm{background:#143529;color:#74dda0}.tag.exc{background:#4a3612;color:#ffc36a}.tag.none{background:#471f2a;color:#ff8a99}
+.rules{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.rule{background:#081827;border:1px solid #203a55;border-radius:11px;padding:12px}.rule b{display:block;color:var(--teal);font-size:12px;margin-bottom:5px}.rule span{font-size:11px;color:#b9cada;line-height:1.5}.privacy{text-align:right;color:#61788e;font-size:10px;margin-top:8px}
+@media(max-width:900px){.upload-zone{grid-template-columns:1fr}.actionrow{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.rules{grid-template-columns:1fr 1fr}.top{display:block}.pill{display:inline-block;margin-top:10px}}
+@media(max-width:600px){.wrap{padding:14px}.rules{grid-template-columns:1fr}.top h1{font-size:24px}}
+</style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <div class="title"><h1>기고 수금내역서 자동 생성</h1><p>DCM 수금내역서와 SAP매출 파일을 업로드하면 수금대상·최종 수금액을 계산해 엑셀 파일로 생성합니다.</p></div>
-    <div class="badge">브라우저 내부 처리 · 서버 업로드 없음</div>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <h2>1. DCM 수금내역서</h2><div class="hint">실납코드·채널·전월(L)·합계(N)를 사용합니다.</div>
-      <label class="drop" id="dcmDrop" for="dcmFile"><strong>DCM 엑셀 파일 선택</strong><span>.xlsx 파일을 클릭하거나 끌어다 놓으세요.</span></label>
-      <input id="dcmFile" type="file" accept=".xlsx" /><div id="dcmName" class="fileline"></div>
+  <header class="top">
+    <div>
+      <div class="eyebrow">GIGO COLLECTION CONTROL TOWER</div>
+      <h1>수금내역서 자동 생성</h1>
+      <div class="muted">DCM · SAP 자동 인식 → 대상월 판정 → 수금 계산 → 월별 누적 엑셀 생성</div>
     </div>
-    <div class="card">
-      <h2>2. SAP매출</h2><div class="hint">실납처(Q)·채널(V)·제품명(Y)·간납가(AW+AZ)를 사용합니다.</div>
-      <label class="drop" id="sapDrop" for="sapFile"><strong>SAP매출 엑셀 파일 선택</strong><span>.xlsx 파일을 클릭하거나 끌어다 놓으세요.</span></label>
-      <input id="sapFile" type="file" accept=".xlsx" /><div id="sapName" class="fileline"></div>
+    <div class="pill">브라우저 내부 처리 · 원본 외부 전송 없음</div>
+  </header>
+
+  <section class="panel">
+    <div class="upload-zone">
+      <label class="drop" id="filesDrop" for="filesInput">
+        <div class="icon">⇧</div>
+        <strong>DCM 수금내역서 + SAP매출 파일을 한 번에 업로드</strong>
+        <span>두 개의 .xlsx 파일을 선택하거나 여기에 끌어다 놓으세요. 파일 내용으로 자동 구분합니다.</span>
+        <input id="filesInput" type="file" accept=".xlsx" multiple>
+      </label>
+      <div class="detect">
+        <div class="filebox wait" id="dcmBox"><div class="k">DCM 수금내역서</div><div class="v" id="dcmName">인식 대기</div></div>
+        <div class="filebox wait" id="sapBox"><div class="k">SAP매출</div><div class="v" id="sapName">인식 대기</div></div>
+      </div>
     </div>
-  </div>
-  <div class="card" style="margin-top:18px">
-    <div class="controls">
-      <div class="field"><label>대상 월</label><input type="month" id="targetMonth" /></div>
-      <button id="analyzeBtn" class="btn secondary" disabled>업로드 파일 검증 · 계산</button>
-      <button id="downloadBtn" class="btn" disabled>수금내역서 생성</button>
+    <div class="actionrow">
+      <div class="field"><label>대상 월 · 자동 판정</label><input type="month" id="targetMonth"></div>
+      <button class="btn" id="analyzeBtn" disabled>파일 재분석</button>
+      <button class="btn primary" id="downloadBtn" disabled>수금내역서 생성</button>
     </div>
-    <div id="status" class="status">DCM 수금내역서와 SAP매출 파일을 각각 업로드해 주세요.</div>
-  </div>
-  <div class="summary" id="summary" style="display:none">
-    <div class="metric em"><div class="k">현금</div><div class="v" id="mCash">-</div><div class="s">약국현금 + 병원현금 + 도입현금</div></div>
-    <div class="metric em"><div class="k">어음</div><div class="v" id="mNote">-</div><div class="s">도입어음</div></div>
-    <div class="metric em"><div class="k">합계</div><div class="v" id="mTotal">-</div><div class="s">현금 + 어음</div></div>
-  </div>
-  <div class="tablecard" id="resultCard" style="display:none">
-    <div class="tablehead"><h3>계산 결과 미리보기</h3><span id="matchInfo" class="hint" style="margin:0"></span></div>
+    <div id="status" class="status">두 파일을 함께 업로드하면 자동으로 인식하고 계산합니다.</div>
+  </section>
+
+  <section class="cards" id="summary" style="display:none">
+    <div class="metric cash"><div class="label">현금</div><div class="value" id="mCash">-</div><div class="sub">약국현금 + 병원현금 + 도입현금</div></div>
+    <div class="metric note"><div class="label">어음</div><div class="value" id="mNote">-</div><div class="sub">도입어음</div></div>
+    <div class="metric total"><div class="label">합계</div><div class="value" id="mTotal">-</div><div class="sub">현금 + 어음</div></div>
+  </section>
+
+  <section class="panel" id="previewPanel">
+    <div class="section-head">
+      <div><h3>생성 엑셀 미리보기</h3><p id="previewSub">업로드 후 생성될 수금내역서 첫 시트를 이미지로 보여줍니다.</p></div>
+      <span class="pill" id="matchInfo">대기 중</span>
+    </div>
+    <div id="previewEmpty" class="preview-empty">두 파일을 업로드하면 이곳에 엑셀 미리보기가 표시됩니다.</div>
+    <div class="preview-shell" id="previewShell" style="display:none"><img id="previewImage" alt="수금내역서 엑셀 미리보기"></div>
+  </section>
+
+  <section class="panel" id="resultCard" style="display:none">
+    <div class="section-head"><div><h3>계산 결과</h3><p>실납처·채널별 적용 출처와 최종 수금액을 확인합니다.</p></div></div>
     <div class="tablewrap"><table><thead><tr><th>구분</th><th>실납처</th><th>채널</th><th>수금대상</th><th>최종 수금액</th><th>출처</th></tr></thead><tbody id="resultBody"></tbody></table></div>
-  </div>
-  <div class="rules">
-    <h3>적용 규칙</h3>
-    <ul>
-      <li>메리놀병원 DW24, 부산성모병원 DW24, 주식회사기고(GIGO) DW21·DW22는 DCM의 합계(N열)를 우선 사용합니다.</li>
-      <li>그 외 DW21·DW22·DW28은 SAP매출을 사용하며, 그 밖의 채널은 DCM 전월(L열)을 사용합니다.</li>
-      <li>SAP 제품명에 콩코르 또는 크레스토가 포함되면 현금, 나머지는 어음으로 분류합니다.</li>
-      <li>각 구분의 합계를 다음 백만원 단위로 올리고, 올림 차액은 수금대상이 가장 큰 한 건에만 반영합니다.</li>
-    </ul>
-  </div>
-  <div class="privacy">템플릿: 2026년 10월 자동수식 완성본 기준</div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><h3>적용 규칙</h3><p>월별 자동 생성에 적용되는 핵심 기준입니다.</p></div></div>
+    <div class="rules">
+      <div class="rule"><b>DCM 합계 우선</b><span>메리놀병원 DW24, 부산성모병원 DW24, 기고 DW21·DW22</span></div>
+      <div class="rule"><b>SAP 적용 채널</b><span>그 외 DW21·DW22·DW28은 SAP매출 기준</span></div>
+      <div class="rule"><b>현금 · 어음</b><span>콩코르·크레스토는 현금, 그 외 SAP 제품은 어음</span></div>
+      <div class="rule"><b>백만원 단위 올림</b><span>구분별 합계를 올리고 차액은 수금대상 최대 건에 반영</span></div>
+    </div>
+  </section>
+  <div class="privacy">기준 양식: 2026년 10월 샘플 · 월별 누적 생성</div>
 </div>
-<script src="app.js?v=20261026-8"></script>
+<canvas id="previewCanvas" style="display:none"></canvas>
+<script src="app.js?v=20261026-9"></script>
 </body>
 </html>
