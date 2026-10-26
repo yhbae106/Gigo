@@ -13,8 +13,42 @@ const num=v=>{const n=Number(String(v==null?'':v).replace(/,/g,''));return Numbe
 const fmt=v=>Math.round(v).toLocaleString('ko-KR');
 const val=(ws,r,c)=>{const x=ws.getCell(r,c).value;if(x&&typeof x==='object'&&'result'in x)return x.result;if(x&&typeof x==='object'&&'text'in x)return x.text;if(x&&typeof x==='object'&&Array.isArray(x.richText))return x.richText.map(t=>t.text).join('');return x};
 function status(m,k){$('status').textContent=m;$('status').className='status'+(k?' '+k:'')}
-function wire(i,d,n,set){const I=$(i),D=$(d),N=$(n),use=f=>{if(!f)return;if(!/\.xlsx$/i.test(f.name)){N.textContent='xlsx 파일만 지원합니다.';N.className='fileline bad';return}set(f);N.textContent='✓ '+f.name;N.className='fileline';ready()};I.addEventListener('change',e=>use(e.target.files[0]));['dragenter','dragover'].forEach(x=>D.addEventListener(x,e=>{e.preventDefault();D.classList.add('drag')}));['dragleave','drop'].forEach(x=>D.addEventListener(x,e=>{e.preventDefault();D.classList.remove('drag')}));D.addEventListener('drop',e=>use(e.dataTransfer.files[0]))}
-wire('dcmFile','dcmDrop','dcmName',f=>dcmFile=f);wire('sapFile','sapDrop','sapName',f=>sapFile=f);
+function strictKind(wb){
+  const d=wb.worksheets.find(s=>String(val(s,5,2)).includes('실납코드')&&String(val(s,5,4)).includes('채널'));
+  const p=wb.worksheets.find(s=>String(val(s,1,17)).includes('실납처')&&String(val(s,1,22)).includes('채널'));
+  if(d&&!p)return 'dcm';
+  if(p&&!d)return 'sap';
+  return null;
+}
+function setFileBox(kind,file){
+  const box=$(kind+'Box'),name=$(kind+'Name');
+  if(file){box.classList.remove('wait');box.classList.add('ok');name.textContent='✓ '+file.name}
+  else{box.classList.remove('ok');box.classList.add('wait');name.textContent='인식 대기'}
+}
+async function acceptFiles(list){
+  const files=Array.from(list||[]).filter(f=>/\.xlsx$/i.test(f.name));
+  if(files.length!==2){status('DCM 수금내역서와 SAP매출 .xlsx 파일 2개를 함께 선택해 주세요.','bad');return}
+  dcmFile=null;sapFile=null;analysis=null;setFileBox('dcm',null);setFileBox('sap',null);
+  $('downloadBtn').disabled=true;$('analyzeBtn').disabled=true;
+  status('두 파일의 구조를 확인해 DCM과 SAP을 자동 인식하고 있습니다.');
+  try{
+    const loaded=await Promise.all(files.map(async file=>({file,wb:await load(file)})));
+    for(const x of loaded){
+      const kind=strictKind(x.wb);
+      if(kind==='dcm'&&!dcmFile)dcmFile=x.file;
+      else if(kind==='sap'&&!sapFile)sapFile=x.file;
+    }
+    if(!dcmFile||!sapFile)throw new Error('두 파일 중 DCM 또는 SAP 형식을 인식하지 못했습니다.');
+    setFileBox('dcm',dcmFile);setFileBox('sap',sapFile);tryAutoMonthFromNames();
+    $('analyzeBtn').disabled=false;
+    await analyzeFiles();
+  }catch(e){status('파일 인식 오류: '+e.message,'bad')}
+}
+const filesInput=$('filesInput'),filesDrop=$('filesDrop');
+filesInput.addEventListener('change',e=>acceptFiles(e.target.files));
+['dragenter','dragover'].forEach(ev=>filesDrop.addEventListener(ev,e=>{e.preventDefault();filesDrop.classList.add('drag')}));
+['dragleave','drop'].forEach(ev=>filesDrop.addEventListener(ev,e=>{e.preventDefault();filesDrop.classList.remove('drag')}));
+filesDrop.addEventListener('drop',e=>acceptFiles(e.dataTransfer.files));
 function parseYmText(text){
   const t=String(text||'');
   let m=t.match(/(20\d{2})[^0-9]{0,3}(1[0-2]|0?[1-9])\s*월?/);
@@ -40,12 +74,6 @@ function tryAutoMonthFromNames(){
   const s=sapFile?parseYmText(sapFile.name):null;
   let target=d||(s?addMonth(s,1):null);
   if(target)$('targetMonth').value=ymString(target);
-}
-function ready(){
-  $('analyzeBtn').disabled=!(dcmFile&&sapFile);
-  $('downloadBtn').disabled=true;
-  analysis=null;
-  tryAutoMonthFromNames();
 }
 const now=new Date();$('targetMonth').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
 async function load(f){const w=new ExcelJS.Workbook();await w.xlsx.load(await f.arrayBuffer());return w}
