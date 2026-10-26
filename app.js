@@ -34,19 +34,75 @@ function copy(src,wb,name){
   }
   return dst;
 }
-function cloneStyle(s){ return s ? JSON.parse(JSON.stringify(s)) : {}; }
+function cloneStyle(s){return s?JSON.parse(JSON.stringify(s)):{}}
+const BASE10=[
+[-620,-620],[-9963130,-9963130],[1973867,1973867],[5013161,5013161],[8649953,8649953],[23216777,23427079],[-100310,-100310],
+[1434756,1434756],[0,0],[0,0],[0,0],[1869038,1869038],[1025264,1025264],[2262722,2262722],[-2375,-2375],[3435165,3494260],[-533029,-533029],[3202654,3202654],[0,0],[1233804,1233804],[12906,12906],
+[-95,-95],[0,0],[1244160,1244160],[3110400,3110400],[8234460,8234460],[0,0],[13213260,13411075],[0,0],
+[7440560,7440560],[32687074,32687074],[3117408,3117408],[0,0],[39993296,40754958],[0,0]
+];
+const POS=[7,8,9,10,11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,29,30,37,38,39,40,41,42,43,44,46,47,48,49,50,51];
+const GROUP_ROWS={약국현금:16,병원현금:36,도입현금:45,도입어음:52};
+const NF='_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
+function borderAll(){
+  const x={style:'thin',color:{argb:'FF000000'}};
+  return {top:x,left:x,bottom:x,right:x};
+}
+function setBaseRow(ws,r,vals){
+  vals.forEach((v,i)=>ws.getCell(r,i+1).value=v);
+}
+function buildBaseWorkbook(){
+  const wb=new ExcelJS.Workbook();
+  wb.creator='Gigo Collection Dashboard';
+  const ws=wb.addWorksheet('수금내역서');
+  const widths=[12.19921875,10.59765625,10.19921875,36.796875,9.59765625,14,17.09765625,14,8.796875,8.796875,13,13,13,13];
+  widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
+  for(let r=1;r<=52;r++) ws.getRow(r).height=22.8;
+  ws.getRow(53).height=16.2; ws.getRow(54).height=16.2;
+  [14,15,31,32,33,34,35].forEach(r=>ws.getRow(r).hidden=true);
+  ws.mergeCells('D1:E3');
+  ws.mergeCells('B16:E16'); ws.mergeCells('B36:E36'); ws.mergeCells('B45:E45'); ws.mergeCells('B52:E52'); ws.mergeCells('D54:E54');
+  ws.getCell('D1').value='기고 수금내역';
+  ws.getCell('D1').font={name:'맑은 고딕',size:22};
+  ws.getCell('D1').alignment={horizontal:'center',vertical:'middle'};
+  ws.getCell('H1').value='현금'; ws.getCell('H2').value='어음'; ws.getCell('H3').value='최종 합계';
+  ['H1','H2','H3'].forEach(a=>{ws.getCell(a).font={name:'맑은 고딕',size:9};ws.getCell(a).alignment={horizontal:'center',vertical:'middle'}});
+  ['A','B','C','D','E'].forEach((l,i)=>{});
+  const headers=['도매상','도매상명','실납코드','실납처명','채널','10월 수금대상액','최종 수금액'];
+  headers.forEach((h,i)=>{
+    const c=ws.getCell(6,i+1); c.value=h; c.border=borderAll(); c.font={name:'맑은 고딕',size:i>=5?10:9,bold:i===6}; c.alignment={horizontal:'center',vertical:'middle'}; if(i>=5)c.numFmt=NF;
+  });
+  T.forEach((x,i)=>{
+    const r=POS[i];
+    const vals=[10093445,'주식회사기고',Number(x.code),x.name,x.ch,BASE10[i][0],BASE10[i][1]];
+    vals.forEach((v,j)=>{
+      const c=ws.getCell(r,j+1); c.value=v; c.border=borderAll(); c.font={name:'맑은 고딕',size:j>=5?11:9,bold:j===6}; c.alignment={horizontal:(j===0||j===2||j===4)?'center':undefined,vertical:'middle'}; if(j>=5)c.numFmt=NF;
+    });
+    if(x.group==='도입현금'){ws.getCell(r,6).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFCC'}};ws.getCell(r,7).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFCC'}};}
+    if(x.group==='도입어음'){ws.getCell(r,6).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFFF'}};ws.getCell(r,7).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFCCFFFF'}};}
+  });
+  const labels={16:'약국 현금',36:'병원 현금',45:'도입 현금',52:'도입 어음'};
+  Object.entries(labels).forEach(([rr,label])=>{
+    const r=Number(rr); ws.getCell(r,1).value='합계'; ws.getCell(r,2).value=label;
+    for(let c=1;c<=7;c++){const x=ws.getCell(r,c);x.border=borderAll();x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};x.font={name:'맑은 고딕',size:c>=6?11:9,bold:c===7};if(c>=6)x.numFmt=NF;}
+  });
+  const sums={약국현금:[0,0],병원현금:[0,0],도입현금:[0,0],도입어음:[0,0]};
+  T.forEach((x,i)=>{sums[x.group][0]+=BASE10[i][0];sums[x.group][1]+=BASE10[i][1]});
+  Object.entries(GROUP_ROWS).forEach(([g,r])=>{ws.getCell(r,6).value=sums[g][0];ws.getCell(r,7).value=sums[g][1]});
+  ws.getCell('F1').value={formula:'F16+F36+F45'}; ws.getCell('G1').value={formula:'G16+G36+G45'};
+  ws.getCell('F2').value={formula:'F52'}; ws.getCell('G2').value={formula:'G52'};
+  ws.getCell('F3').value={formula:'F1+F2'}; ws.getCell('G3').value={formula:'G1+G2'};
+  for(let r=1;r<=3;r++){for(let c=6;c<=7;c++){const x=ws.getCell(r,c);x.numFmt=NF;x.font={name:'맑은 고딕',size:11,bold:c===7};if(c===7)x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};}}
+  ws.pageSetup={orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:'A1:N54'};
+  return wb;
+}
 function monthCols(month){
-  const [ys,ms]=month.split('-');
-  const y=Number(ys), m=Number(ms);
-  const diff=(y-2026)*12+(m-10);
-  if(diff<0) throw new Error('2026년 10월 이후 월만 누적 생성할 수 있습니다.');
-  const target=6+diff*3;
-  return {target,final:target+1,spacer:target-1,year:y,month:m};
+  const [ys,ms]=month.split('-'),y=Number(ys),m=Number(ms),diff=(y-2026)*12+(m-10);
+  if(diff<0)throw new Error('2026년 10월 이후 월만 지원합니다.');
+  return {target:6+diff*3,final:7+diff*3,spacer:8+diff*3,year:y,month:m};
 }
 function styleMonthPair(ws,target,final,spacer){
-  ws.getColumn(target).width=ws.getColumn(6).width;
-  ws.getColumn(final).width=ws.getColumn(7).width;
-  ws.getColumn(spacer).width=ws.getColumn(8).width;
+  ws.getColumn(target).width=14; ws.getColumn(final).width=17.09765625; ws.getColumn(spacer).width=14;
   for(let r=1;r<=54;r++){
     ws.getCell(r,target).style=cloneStyle(ws.getCell(r,6).style);
     ws.getCell(r,final).style=cloneStyle(ws.getCell(r,7).style);
@@ -54,105 +110,75 @@ function styleMonthPair(ws,target,final,spacer){
   }
 }
 function applyMonth(ws,c,month){
-  const mc=monthCols(month), tc=mc.target, fc=mc.final, sc=mc.spacer;
-  styleMonthPair(ws,tc,fc,sc);
-  ws.getCell(6,tc).value=mc.month+'월 수금대상액';
-  ws.getCell(6,fc).value='최종 수금액';
-  ws.getCell(6,sc).value=null;
-  ws.getCell(1,sc).value='현금';
-  ws.getCell(2,sc).value='어음';
-  ws.getCell(3,sc).value='최종 합계';
-
-  const pos=[7,8,9,10,11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,29,30,37,38,39,40,41,42,43,44,46,47,48,49,50,51];
-  c.rows.forEach((x,i)=>{
-    const r=pos[i];
-    ws.getCell(r,tc).value=x.amount;
-    ws.getCell(r,fc).value=x.final;
-  });
-  const groups={
-    '약국현금':{row:16,start:7,end:13},
-    '병원현금':{row:36,start:17,end:30},
-    '도입현금':{row:45,start:37,end:44},
-    '도입어음':{row:52,start:46,end:51}
-  };
-  Object.entries(groups).forEach(([g,o])=>{
+  const mc=monthCols(month),tc=mc.target,fc=mc.final,sc=mc.spacer;
+  if(mc.month===10&&mc.year===2026){
+    POS.forEach((r,i)=>{ws.getCell(r,tc).value=c.rows[i].amount;ws.getCell(r,fc).value=c.rows[i].final});
+  }else{
+    styleMonthPair(ws,tc,fc,sc);
+    ws.getCell(6,tc).value=mc.month+'월 수금대상액'; ws.getCell(6,fc).value='최종 수금액';
+    ws.getCell(1,sc).value='현금'; ws.getCell(2,sc).value='어음'; ws.getCell(3,sc).value='최종 합계';
+    POS.forEach((r,i)=>{ws.getCell(r,tc).value=c.rows[i].amount;ws.getCell(r,fc).value=c.rows[i].final});
+  }
+  Object.entries(GROUP_ROWS).forEach(([g,r])=>{
     const arr=c.rows.filter(x=>x.group===g);
-    ws.getCell(o.row,tc).value=arr.reduce((s,x)=>s+x.amount,0);
-    ws.getCell(o.row,fc).value=arr.reduce((s,x)=>s+x.final,0);
+    ws.getCell(r,tc).value=arr.reduce((s,x)=>s+x.amount,0);
+    ws.getCell(r,fc).value=arr.reduce((s,x)=>s+x.final,0);
   });
-  const tL=ws.getColumn(tc).letter, fL=ws.getColumn(fc).letter;
-  ws.getCell(1,tc).value={formula:tL+'16+'+tL+'36+'+tL+'45'};
-  ws.getCell(1,fc).value={formula:fL+'16+'+fL+'36+'+fL+'45'};
-  ws.getCell(2,tc).value={formula:tL+'52'};
-  ws.getCell(2,fc).value={formula:fL+'52'};
-  ws.getCell(3,tc).value={formula:tL+'1+'+tL+'2'};
-  ws.getCell(3,fc).value={formula:fL+'1+'+fL+'2'};
+  const tl=ws.getColumn(tc).letter,fl=ws.getColumn(fc).letter;
+  ws.getCell(1,tc).value={formula:tl+'16+'+tl+'36+'+tl+'45'}; ws.getCell(1,fc).value={formula:fl+'16+'+fl+'36+'+fl+'45'};
+  ws.getCell(2,tc).value={formula:tl+'52'}; ws.getCell(2,fc).value={formula:fl+'52'};
+  ws.getCell(3,tc).value={formula:tl+'1+'+tl+'2'}; ws.getCell(3,fc).value={formula:fl+'1+'+fl+'2'};
   return mc;
 }
 function openDb(){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open('gigo-collection',1);
-    req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('files')) req.result.createObjectStore('files'); };
-    req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+    const req=indexedDB.open('gigo-collection-v3',1);
+    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('files'))req.result.createObjectStore('files')};
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
   });
 }
 async function saveCumulative(buffer,month){
   const db=await openDb();
-  await new Promise((resolve,reject)=>{
-    const tx=db.transaction('files','readwrite');
-    tx.objectStore('files').put({month,buffer},'latest');
-    tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
-  });
+  await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put({month,buffer},'latest');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
   db.close();
 }
 async function loadCumulative(){
   const db=await openDb();
-  const data=await new Promise((resolve,reject)=>{
-    const tx=db.transaction('files','readonly'),req=tx.objectStore('files').get('latest');
-    req.onsuccess=()=>resolve(req.result||null); req.onerror=()=>reject(req.error);
-  });
-  db.close(); return data;
+  const data=await new Promise((resolve,reject)=>{const tx=db.transaction('files','readonly'),req=tx.objectStore('files').get('latest');req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});
+  db.close();return data;
 }
 async function loadBaseWorkbook(selectedMonth){
   const saved=await loadCumulative().catch(()=>null);
-  let buf=null, source='10월 기본 템플릿';
-  if(saved && saved.buffer){
-    const s=String(saved.month||'');
-    if(s && s<=selectedMonth){ buf=saved.buffer; source='이전 누적 파일('+s+')'; }
+  if(saved&&saved.buffer&&saved.month&&saved.month<selectedMonth){
+    try{const wb=new ExcelJS.Workbook();await wb.xlsx.load(saved.buffer);return{wb,source:'이전 누적 파일('+saved.month+')'}}catch(e){console.warn('saved workbook ignored',e)}
   }
-  if(!buf){
-    const res=await fetch('template.xlsx?v=20261026-5',{cache:'no-store'});
-    if(!res.ok) throw new Error('기본 샘플 템플릿을 불러오지 못했습니다.');
-    buf=await res.arrayBuffer();
-  }
-  const wb=new ExcelJS.Workbook(); await wb.xlsx.load(buf); return {wb,source};
+  return{wb:buildBaseWorkbook(),source:'10월 기본 샘플'};
 }
 $('downloadBtn').addEventListener('click',async()=>{
   try{
     if(!analysis)return;
     $('downloadBtn').disabled=true;
     const month=$('targetMonth').value||'';
-    status('샘플 양식을 불러와 '+month+' 데이터를 누적하고 있습니다.');
-    const base=await loadBaseWorkbook(month), wb=base.wb;
-    let ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
-    if(!ws) throw new Error('샘플 템플릿의 수금내역서 시트를 찾을 수 없습니다.');
+    status('샘플 양식에 '+month+' 데이터를 누적하고 있습니다.');
+    const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
+    if(!ws)throw new Error('수금내역서 시트를 생성할 수 없습니다.');
     const mc=applyMonth(ws,analysis.calc,month);
-
-    wb.worksheets.slice().forEach(s=>{ if(s.id!==ws.id) wb.removeWorksheet(s.id); });
-    const yy=String(mc.year), mm=String(mc.month).padStart(2,'0');
-    copy(analysis.dws,wb,yy.slice(2)+'.'+mm+' DCM수금내역서');
-    const ss=copy(analysis.sws,wb,yy.slice(2)+'.'+mm+' SAP매출');
-    ss.getCell(1,75).value='간납가'; ss.getCell(1,77).value='유형';
+    const yy=String(mc.year),mm=String(mc.month).padStart(2,'0');
+    const dcmName=yy.slice(2)+'.'+mm+' DCM수금내역서',sapName=yy.slice(2)+'.'+mm+' SAP매출';
+    const oldD=wb.getWorksheet(dcmName); if(oldD)wb.removeWorksheet(oldD.id);
+    const oldS=wb.getWorksheet(sapName); if(oldS)wb.removeWorksheet(oldS.id);
+    copy(analysis.dws,wb,dcmName);
+    const ss=copy(analysis.sws,wb,sapName);
+    ss.getCell(1,75).value='간납가';ss.getCell(1,77).value='유형';
     for(let r=2;r<=analysis.sws.rowCount;r++){
       ss.getCell(r,75).value=num(val(analysis.sws,r,49))+num(val(analysis.sws,r,52));
-      const p=String(val(analysis.sws,r,25)||'');
-      ss.getCell(r,77).value=(p.includes('콩코르')||p.includes('크레스토'))?'현금':'어음';
+      const p=String(val(analysis.sws,r,25)||'');ss.getCell(r,77).value=(p.includes('콩코르')||p.includes('크레스토'))?'현금':'어음';
     }
     const buf=await wb.xlsx.writeBuffer();
     await saveCumulative(buf,month).catch(()=>{});
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),a=document.createElement('a');
-    a.href=URL.createObjectURL(blob); a.download='기고 수금 내역서_'+yy+'년 '+mm+'월_누적.xlsx'; a.click(); URL.revokeObjectURL(a.href);
-    status('완료: '+base.source+'을 기준으로 '+mc.month+'월 값이 '+ws.getColumn(mc.target).letter+'/'+ws.getColumn(mc.final).letter+'열에 누적되었습니다.','good');
-  }catch(e){ console.error(e); status('생성 오류: '+e.message,'bad'); }
-  finally{$('downloadBtn').disabled=false;}
+    a.href=URL.createObjectURL(blob);a.download='기고 수금 내역서_'+yy+'년 '+mm+'월_누적.xlsx';a.click();URL.revokeObjectURL(a.href);
+    status('완료: '+base.source+' 기준으로 '+mc.month+'월 데이터가 '+ws.getColumn(mc.target).letter+'/'+ws.getColumn(mc.final).letter+'열에 저장되었습니다.','good');
+  }catch(e){console.error(e);status('생성 오류: '+e.message,'bad')}
+  finally{$('downloadBtn').disabled=false}
 });
