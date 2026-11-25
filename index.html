@@ -12,7 +12,6 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>GIGO 수금 CONTROL TOWER</title>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 :root{--bg:#07111f;--panel:#0e1d30;--panel2:#10243a;--line:#203a55;--text:#eef6ff;--muted:#91a9c1;--green:#59d98e;--orange:#ffb454;--red:#ff7285;--blue:#66a7ff;--teal:#4fd1c5}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#102b48 0,#07111f 45%);color:var(--text);font-family:Arial,'Noto Sans KR',sans-serif}
@@ -25,7 +24,9 @@
 .section-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}.section-head h3{font-size:16px;margin:0}.section-head p{font-size:11px;color:var(--muted);margin:4px 0 0}.preview-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}.preview-shell{background:#d8dde5;border-radius:12px;padding:18px;overflow:hidden;display:flex;justify-content:center;align-items:flex-start;width:100%}.preview-shell img{display:block;width:auto;max-width:100%;height:auto;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.22);border-radius:3px;margin:0 auto}.preview-empty{padding:70px 20px;text-align:center;color:#6f879e;background:#081827;border:1px dashed #34516f;border-radius:12px}.btn.small{height:34px;padding:0 12px;font-size:12px}
 .tablewrap{overflow:auto;max-height:400px;border:1px solid #1d354c;border-radius:11px}table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}th{position:sticky;top:0;background:#122944;color:#abc1d5;z-index:2}th,td{padding:9px 10px;border-bottom:1px solid #1d354c;white-space:nowrap}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}td.num{text-align:right}.tag{display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800}.tag.sap{background:#12335b;color:#78b3ff}.tag.dcm{background:#143529;color:#74dda0}.tag.exc{background:#4a3612;color:#ffc36a}.tag.none{background:#471f2a;color:#ff8a99}
 .rules{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.rule{background:#081827;border:1px solid #203a55;border-radius:11px;padding:12px}.rule b{display:block;color:var(--teal);font-size:12px;margin-bottom:5px}.rule span{font-size:11px;color:#b9cada;line-height:1.5}.privacy{text-align:right;color:#61788e;font-size:10px;margin-top:8px}
-@media(max-width:900px){.upload-zone{grid-template-columns:1fr}.actionrow{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.rules{grid-template-columns:1fr 1fr}.top{display:block}.pill{display:inline-block;margin-top:10px}}
+.master-actions{grid-template-columns:minmax(180px,240px) repeat(4,minmax(0,1fr))}
+.upload-zone>*,.detect>*,.actionrow>*{min-width:0}
+@media(max-width:900px){.actionrow.master-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.master-actions .field{grid-column:1/-1}.upload-zone{grid-template-columns:1fr}.actionrow{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.rules{grid-template-columns:1fr 1fr}.top{display:block}.pill{display:inline-block;margin-top:10px}}
 @media(max-width:600px){.wrap{padding:calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))}.rules{grid-template-columns:1fr}.top h1{font-size:24px}.top{gap:12px}.panel{border-radius:14px}.actionrow{gap:9px}.btn{min-height:44px}}
 @media(display-mode:standalone){body{overscroll-behavior-y:none}.wrap{padding-top:calc(18px + env(safe-area-inset-top))}}
 </style>
@@ -49,7 +50,7 @@
       <div><h3>공용 데이터 · 마스터모드</h3><p>대웅제약 배영훈</p></div>
       <span class="pill" id="masterBadge">읽기 전용</span>
     </div>
-    <div class="actionrow" style="grid-template-columns:minmax(180px,240px) 150px 160px 190px 190px">
+    <div class="actionrow master-actions">
       <div class="field"><label>마스터 비밀번호</label><input type="password" id="masterPassword" autocomplete="current-password" placeholder="마스터 비밀번호"></div>
       <button class="btn" id="masterLoginBtn">마스터 로그인</button>
       <button class="btn" id="masterRefreshBtn">공용 새로고침</button>
@@ -116,7 +117,8 @@
 </div>
 <canvas id="previewCanvas" style="display:none"></canvas>
 <script src="sync-config.js?v=20261026-2"></script>
-<script src="app.js?v=20261125-1"></script>
-<script src="pwa.js?v=20261026-1"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script defer src="app.js?v=20261125-1"></script>
+<script src="pwa.js?v=20261125-2"></script>
 <script defer src="work-hub-link.js?v=20261029"></script></body>
 </html>

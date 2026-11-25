@@ -34,3 +34,8 @@ require('./preview-month')(js).then(()=>console.log('Gigo preview month regressi
   console.error(error);
   process.exitCode=1;
 });
+
+require('./shell-cache')(sw,html).then(()=>console.log('Gigo cache scope and offline assets passed.')).catch(error=>{
+  console.error(error);
+  process.exitCode=1;
+});

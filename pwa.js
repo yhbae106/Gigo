@@ -34,7 +34,7 @@ installBtn?.addEventListener('click',async()=>{
 if('serviceWorker' in navigator){
   window.addEventListener('load',async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js?v=20261026-1',{scope:'./'});
+      const reg=await navigator.serviceWorker.register('./sw.js?v=20261125-2',{scope:'./'});
       reg.update();
       if(reg.waiting)reg.waiting.postMessage('SKIP_WAITING');
       reg.addEventListener('updatefound',()=>{
