@@ -13,11 +13,7 @@ const pwa=fs.readFileSync('pwa.js','utf8');
 ].concat(['sharedDownloadBtn','installAppBtn']).forEach(id=>ok(html.includes('id="'+id+'"'),'DOM id '+id));
 ok(/app\.js\?v=/.test(html),'app.js cache-busting version');
 ok(js.includes('async function renderExcelPreview'),'preview renderer exists');
-ok(js.includes('firstCol=1,lastCol=7,renderRows=previewRows(ws)'),'preview fixed to row 6 through column G with filtered rows');
 ok(js.includes("toDataURL('image/jpeg',0.96)"),'JPG export encoding');
-ok(js.includes('previewDisplayText')&&js.includes("c===1||c===3"),'code columns rendered without commas');
-ok(js.includes("c===6||c===7")&&js.includes("toLocaleString('ko-KR')"),'amount columns rendered with thousand separators');
-ok(js.includes('previewRowHasVisibleValue')&&js.includes('previewRows(ws)'),'hidden and blank rows removed');
 ok(js.includes("saveJpgBtn"),'JPG button wiring');
 ok(js.includes('previewMerges')&&js.includes('previewMergeAt'),'merged-cell rendering');
 ok(js.includes('gigoLoad')&&js.includes('gigoSave')&&js.includes('gigoMasterLogin'),'cross-browser master sync');
@@ -26,7 +22,6 @@ ok(js.includes('serializeSharedSheet')&&js.includes('addSharedSourceSheet'),'sha
 ok(js.includes("source:{dcm:serializeSharedSheet(analysis.dws),sap:serializeSharedSheet(analysis.sws)}"),'master save stores DCM/SAP sheet payloads');
 ok(/endpoint:\s*'https:\/\/script\.google\.com\/macros\/s\//.test(cfg),'Apps Script endpoint configured');
 if(process.exitCode)process.exit(process.exitCode);
-console.log('Gigo harness passed.');
 
 ok(html.includes('rel="manifest"'),'PWA manifest linked');
 ok(html.includes('pwa.js?v='),'PWA installer script linked');
@@ -35,3 +30,7 @@ ok(manifest.start_url==='./'&&manifest.scope==='./','manifest scoped for GitHub 
 ok(Array.isArray(manifest.icons)&&manifest.icons.length>0,'manifest icon configured');
 ok(sw.includes("self.addEventListener('install'")&&sw.includes("self.addEventListener('fetch'"),'service worker install/fetch handlers');
 ok(pwa.includes('beforeinstallprompt')&&pwa.includes('serviceWorker.register'),'install prompt and service worker registration');
+require('./preview-month')(js).then(()=>console.log('Gigo preview month regression passed.')).catch(error=>{
+  console.error(error);
+  process.exitCode=1;
+});

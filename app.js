@@ -1,6 +1,7 @@
 
 const $=id=>document.getElementById(id);
-let dcmFile=null,sapFile=null,analysis=null,previewJpgUrl='';
+let dcmFile=null,sapFile=null,analysis=null,pendingUpload=null;
+let previewJpg=null,previewRevision=0;
 let gigoShared={version:1,months:{}}, masterOn=false;
 const T=[
 ['약국현금','현금','10039905','대구가톨릭대학교의료원','DW35'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW35'],['약국현금','현금','10039905','대구가톨릭대학교의료원','DW30'],['약국현금','현금','10040464','(재)천주교부산교구메리놀병원','DW30'],['약국현금','현금','10040911','창원파티마병원','DW30'],['약국현금','현금','10047248','부산성모병원(재단법인천주교부산교구유지재단)','DW30'],['약국현금','현금','10093445','주식회사기고(GIGO)','DW18'],
@@ -29,11 +30,14 @@ function setFileBox(kind,file){
 async function acceptFiles(list){
   const files=Array.from(list||[]).filter(f=>/\.xlsx$/i.test(f.name));
   if(files.length!==2){status('DCM 수금내역서와 SAP매출 .xlsx 파일 2개를 함께 선택해 주세요.','bad');return}
-  dcmFile=null;sapFile=null;analysis=null;previewJpgUrl='';if($('saveJpgBtn'))$('saveJpgBtn').disabled=true;setFileBox('dcm',null);setFileBox('sap',null);
+  pendingUpload=files;
+  dcmFile=null;sapFile=null;analysis=null;setFileBox('dcm',null);setFileBox('sap',null);
+  resetExcelPreview('업로드한 파일을 확인하고 있습니다.');
   $('downloadBtn').disabled=true;$('analyzeBtn').disabled=true;
   status('두 파일의 구조를 확인해 DCM과 SAP을 자동 인식하고 있습니다.');
   try{
     const loaded=await Promise.all(files.map(async file=>({file,wb:await load(file)})));
+    if(pendingUpload!==files)return;
     for(const x of loaded){
       const kind=strictKind(x.wb);
       if(kind==='dcm'&&!dcmFile)dcmFile=x.file;
@@ -43,7 +47,12 @@ async function acceptFiles(list){
     setFileBox('dcm',dcmFile);setFileBox('sap',sapFile);tryAutoMonthFromNames();
     $('analyzeBtn').disabled=false;
     await analyzeFiles();
-  }catch(e){status('파일 인식 오류: '+e.message,'bad')}
+  }catch(e){
+    if(pendingUpload===files){
+      resetExcelPreview('두 파일의 형식을 확인해 주세요.');
+      status('파일 인식 오류: '+e.message,'bad');
+    }
+  }finally{if(pendingUpload===files)pendingUpload=null}
 }
 const filesInput=$('filesInput'),filesDrop=$('filesDrop');
 filesInput.addEventListener('change',e=>acceptFiles(e.target.files));
@@ -92,14 +101,11 @@ async function pullSharedData(render=true){
     gigoShared=normalizeShared(json.data);
     const keys=Object.keys(gigoShared.months).sort();updateSharedDownloadButton();
     if(!keys.length){masterStatus('공용 저장 데이터가 아직 없습니다.');return true}
-    const latest=keys.at(-1),snap=gigoShared.months[latest];
+    const latest=keys.at(-1);
     masterStatus('공용 데이터 적용 · 최근 저장 '+latest+(json.updatedAt?' · '+new Date(json.updatedAt).toLocaleString('ko-KR'):''),'good');
-    if(render&&!analysis){
+    if(render&&!analysis&&!pendingUpload){
       $('targetMonth').value=latest;
-      const c={rows:snap.rows,matched:snap.matched||snap.rows.length,unmatched:snap.unmatched||0};
-      show(c);
-      await renderExcelPreview(c,latest);
-      $('matchInfo').textContent='공용 저장 · '+latest;
+      await showSharedPreview(latest);
     }
     return true;
   }catch(e){masterStatus('공용 데이터 조회 실패 · '+e.message,'bad');return false}
@@ -200,12 +206,14 @@ function show(a){
   $('resultBody').innerHTML=a.rows.map(x=>'<tr><td>'+x.group+'</td><td>'+x.name+'</td><td>'+x.ch+'</td><td class="num">'+fmt(x.amount)+'</td><td class="num">'+fmt(x.final)+'</td><td><span class="tag '+(!x.found?'none':x.isExc?'exc':x.source.startsWith('SAP')?'sap':'dcm')+'">'+(!x.found?'미매칭':x.source)+'</span></td></tr>').join('');
 }
 async function analyzeFiles(){
+  const dcm=dcmFile,sap=sapFile;
   try{
-    if(!dcmFile||!sapFile)throw new Error('DCM과 SAP 파일 2개가 모두 필요합니다.');
+    if(!dcm||!sap)throw new Error('DCM과 SAP 파일 2개가 모두 필요합니다.');
     $('analyzeBtn').disabled=true;status('대상 월 판정 · 수금 계산 · 엑셀 미리보기를 생성하고 있습니다.');
-    const [dw,sw]=await Promise.all([load(dcmFile),load(sapFile)]),ds=sheet(dw,'dcm'),ss=sheet(sw,'sap');
+    const [dw,sw]=await Promise.all([load(dcm),load(sap)]),ds=sheet(dw,'dcm'),ss=sheet(sw,'sap');
+    if(dcm!==dcmFile||sap!==sapFile)return;
     if(!ds||!ss)throw new Error('필수 시트를 찾을 수 없습니다.');
-    const dYm=workbookYm(dcmFile,dw),sYm=workbookYm(sapFile,sw);
+    const dYm=workbookYm(dcm,dw),sYm=workbookYm(sap,sw);
     let target=dYm||(sYm?addMonth(sYm,1):null);
     if(target)$('targetMonth').value=ymString(target);
     let monthMsg='';
@@ -219,9 +227,14 @@ async function analyzeFiles(){
     analysis={calc:c,dws:ds,sws:ss,targetMonth:$('targetMonth').value};
     show(c);$('downloadBtn').disabled=false;if($('masterSaveBtn'))$('masterSaveBtn').disabled=!masterOn;
     await renderExcelPreview(c,$('targetMonth').value);
+    if(dcm!==dcmFile||sap!==sapFile)return;
     status((c.unmatched?'계산 완료 · '+c.matched+'건 매칭 / '+c.unmatched+'건 미매칭':'계산 완료 · '+c.matched+'건 모두 매칭')+' · '+monthMsg,c.unmatched?'':'good');
-  }catch(e){console.error(e);status('오류: '+e.message,'bad')}
-  finally{$('analyzeBtn').disabled=!(dcmFile&&sapFile)}
+  }catch(e){
+    if(dcm===dcmFile&&sap===sapFile){
+      console.error(e);resetExcelPreview('파일 분석 중 오류가 발생했습니다.');status('오류: '+e.message,'bad');
+    }
+  }
+  finally{if(dcm===dcmFile&&sap===sapFile)$('analyzeBtn').disabled=!(dcm&&sap)}
 }
 $('analyzeBtn').addEventListener('click',analyzeFiles);
 
@@ -407,31 +420,31 @@ function previewCellText(cell){
   if(typeof v==='number')return Math.round(v).toLocaleString('ko-KR');
   return String(v);
 }
-function previewRowHasVisibleValue(ws,r){
-  for(let c=1;c<=7;c++){
+function previewRowHasVisibleValue(ws,r,columns){
+  for(const c of columns){
     const t=previewCellText(ws.getCell(r,c));
     if(String(t||'').trim()!=='')return true;
   }
   return false;
 }
-function previewRows(ws){
+function previewRows(ws,columns){
   const rows=[];
   for(let r=6;r<=200;r++){
     if(ws.getRow(r).hidden)continue;
-    if(previewRowHasVisibleValue(ws,r))rows.push(r);
+    if(previewRowHasVisibleValue(ws,r,columns))rows.push(r);
   }
   return rows;
 }
-function previewDisplayText(cell,r,c){
+function previewDisplayText(cell,c){
   let text=previewCellText(cell);
   if(text==null)return '';
   text=String(text);
   if(c===1||c===3)return text.replace(/,/g,'');
-  if((c===6||c===7)&&text){
+  if(c>5&&text){
     const raw=text.replace(/,/g,'');
     if(/^-?\d+(\.\d+)?$/.test(raw)){
       const n=Number(raw);
-      if(Number.isFinite(n))return Math.round(n).toLocaleString('ko-KR');
+      if(Number.isFinite(n))return n===0?'-':Math.round(n).toLocaleString('ko-KR');
     }
   }
   return text;
@@ -456,18 +469,37 @@ function drawPreviewText(ctx,text,x,y,w,h,align,fontSize,bold){
   const tx=align==='right'?x+w-pad:align==='center'?x+w/2:x+pad;
   ctx.fillText(t,tx,y+h/2);
 }
+function resetExcelPreview(message){
+  previewRevision++;
+  previewJpg=null;
+  $('saveJpgBtn').disabled=true;
+  $('previewShell').style.display='none';
+  $('previewEmpty').style.display='block';
+  $('previewEmpty').textContent=message;
+  $('previewSub').textContent='';
+}
+function showSharedPreview(month){
+  const snap=gigoShared.months[month];
+  const c={rows:snap.rows,matched:snap.matched||snap.rows.length,unmatched:snap.unmatched||0};
+  show(c);
+  $('matchInfo').textContent='공용 저장 · '+month;
+  return renderExcelPreview(c,month);
+}
 async function renderExcelPreview(calcResult,month){
+  resetExcelPreview('미리보기를 생성하고 있습니다.');
+  const revision=previewRevision;
   try{
     const base=await loadBaseWorkbook(month),wb=base.wb,ws=wb.getWorksheet('수금내역서')||wb.worksheets[0];
-    applyMonth(ws,calcResult,month);
-
-    const firstCol=1,lastCol=7,renderRows=previewRows(ws);
+    if(revision!==previewRevision)return;
+    const period=applyMonth(ws,calcResult,month);
+    const columns=[1,2,3,4,5,period.target,period.final];
+    const renderRows=previewRows(ws,columns);
     if(!renderRows.length)throw new Error('미리보기에 표시할 행이 없습니다.');
-    const widths=[],xPos=[0],rowHeights=[],yPos=[0],rowIndex=new Map();
+    const xPos=[0],rowHeights=[],yPos=[0],rowIndex=new Map();
 
-    for(let c=firstCol;c<=lastCol;c++){
+    for(const c of columns){
       const px=Math.max(54,Math.min(320,(ws.getColumn(c).width||12)*7.2));
-      widths.push(px);xPos.push(xPos.at(-1)+px);
+      xPos.push(xPos.at(-1)+px);
     }
     renderRows.forEach((r,i)=>{
       rowIndex.set(r,i);
@@ -481,24 +513,16 @@ async function renderExcelPreview(calcResult,month){
     ctx.setTransform(scale,0,0,scale,0,0);
     ctx.fillStyle='#fff';ctx.fillRect(0,0,totalW,totalH);
 
-    const merges=previewMerges(ws),skip=new Set();
+    const merges=previewMerges(ws);
     for(const r of renderRows){
       const ri=rowIndex.get(r);
-      for(let c=firstCol;c<=lastCol;c++){
-        const k=r+':'+c;if(skip.has(k))continue;
+      for(const [i,c] of columns.entries()){
         const m=previewMergeAt(merges,r,c);
         if(m&&(m.top!==r||m.left!==c))continue;
 
-        let x=xPos[c-firstCol],y=yPos[ri],w=widths[c-firstCol],h=rowHeights[ri];
-        if(m){
-          const l=Math.max(m.left,firstCol),rr=Math.min(m.right,lastCol);
-          if(l<=rr){
-            x=xPos[l-firstCol];
-            w=xPos[rr-firstCol+1]-x;
-            for(let mc=l;mc<=rr;mc++)if(mc!==c)skip.add(r+':'+mc);
-          }
-        }
-
+        let end=i+1;
+        while(m&&end<columns.length&&columns[end]<=m.right)end++;
+        const x=xPos[i],y=yPos[ri],w=xPos[end]-x,h=rowHeights[ri];
         const cell=ws.getCell(r,c);
         let fill='#ffffff';
         const argb=cell.fill?.fgColor?.argb;
@@ -507,8 +531,7 @@ async function renderExcelPreview(calcResult,month){
         ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
         ctx.strokeStyle='#222';ctx.lineWidth=.7;ctx.strokeRect(x,y,w,h);
 
-        let text=previewDisplayText(cell,r,c);
-        if((c===6||c===7)&&String(text).trim()==='0')text='-';
+        const text=previewDisplayText(cell,c);
         const align=previewAlign(cell,r,c);
         const fontSize=Math.max(8,Math.min(14,cell.font?.size||9));
         drawPreviewText(ctx,text,x,y,w,h,align,fontSize,!!cell.font?.bold);
@@ -516,24 +539,36 @@ async function renderExcelPreview(calcResult,month){
     }
 
     const png=canvas.toDataURL('image/png');
-    previewJpgUrl=canvas.toDataURL('image/jpeg',0.96);
+    previewJpg={month,url:canvas.toDataURL('image/jpeg',0.96)};
     $('previewImage').src=png;
     $('previewShell').style.display='flex';$('previewEmpty').style.display='none';
-    $('previewSub').textContent=month+' 기준 · 6행부터 G열까지 · 공란 행 자동 제거';
+    $('previewSub').textContent=period.year+'년 '+period.month+'월 수금내역';
     if($('saveJpgBtn'))$('saveJpgBtn').disabled=false;
   }catch(e){
+    if(revision!==previewRevision)return;
     console.error('preview error',e);
-    $('previewSub').textContent='미리보기 생성 중 오류가 발생했습니다.';
-    if($('saveJpgBtn'))$('saveJpgBtn').disabled=true;
+    resetExcelPreview('미리보기 생성 중 오류가 발생했습니다.');
   }
 }
+$('targetMonth').addEventListener('change',()=>{
+  const month=$('targetMonth').value;
+  if(analysis&&month)renderExcelPreview(analysis.calc,month);
+  else if(!analysis&&pendingUpload)return;
+  else if(gigoShared.months[month])showSharedPreview(month);
+  else{
+    resetExcelPreview(month?'해당 월의 미리보기 데이터가 없습니다.':'대상 월을 선택해 주세요.');
+    if(!analysis){
+      $('matchInfo').textContent='대기 중';
+      $('summary').style.display='none';
+      $('resultCard').style.display='none';
+    }
+  }
+});
 $('saveJpgBtn')?.addEventListener('click',()=>{
-  if(!previewJpgUrl)return;
-  const month=$('targetMonth').value||'';
-  const [yy,mm]=month.split('-');
+  if(!previewJpg)return;
   const a=document.createElement('a');
-  a.href=previewJpgUrl;
-  a.download='기고 수금내역_'+(yy||'')+'-'+(mm||'')+'_미리보기.jpg';
+  a.href=previewJpg.url;
+  a.download='기고 수금내역_'+previewJpg.month+'_미리보기.jpg';
   a.click();
 });
 async function downloadSharedWorkbook(){
